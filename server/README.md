@@ -1,10 +1,10 @@
 # Agendify Canvas Proxy
 
-Backend mínimo que protege tu Personal Access Token de Canvas: vive como
-variable de entorno en el servidor, nunca en el navegador. La app de
-Agendify (Netlify) le pide a este servicio la lista de cursos y tareas;
-este servicio llama a Canvas con el token y devuelve solo los datos que
-la app necesita.
+Backend mínimo que protege tu Personal Access Token de Canvas (y tus
+credenciales de Spotify): viven como variables de entorno en el servidor,
+nunca en el navegador. La app de Agendify (Netlify) le pide a este servicio
+la lista de cursos/tareas y la búsqueda de canciones; este servicio llama a
+Canvas/Spotify y devuelve solo los datos que la app necesita.
 
 ## Variables de entorno
 
@@ -17,6 +17,11 @@ la app necesita.
 - `API_KEY` — una clave que tú inventes; el frontend debe enviarla en el
   header `x-api-key`. Evita que cualquiera que encuentre la URL de este
   servicio pueda usar tu token para leer tu Canvas.
+- `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` — de tu propia app en
+  [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard)
+  (crea una app gratis, no requiere aprobación de nadie). Se usan solo para
+  buscar en el catálogo público de Spotify (Client Credentials flow); no
+  necesitas que el usuario inicie sesión en Spotify.
 - `PORT` — opcional, Render la define automáticamente.
 
 ## Endpoints
@@ -27,6 +32,9 @@ la app necesita.
   listado real de materias/créditos).
 - `GET /api/courses/:id/assignments` — tareas del curso, con fecha de
   entrega, tipo de entrega inferido y si ya fue enviada en Canvas.
+- `GET /api/spotify/search?q=...` — hasta 8 canciones que coincidan, con
+  nombre, artista y carátula. El frontend reproduce la elegida con el
+  reproductor embebido oficial de Spotify (no pasa audio por este backend).
 
 ## Deploy en Render
 

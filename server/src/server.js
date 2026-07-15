@@ -3,6 +3,7 @@ const cors = require("cors");
 const { getActiveCourses, getCourseAssignments } = require("./canvas");
 const { classifyDeliveryType } = require("./classify");
 const { getCreditsForCourse } = require("./credits");
+const { searchTracks } = require("./spotify");
 
 const app = express();
 
@@ -80,6 +81,17 @@ app.get("/api/courses/:id/assignments", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(502).json({ error: friendlyCanvasError(err) });
+  }
+});
+
+app.get("/api/spotify/search", async (req, res) => {
+  const q = (req.query.q || "").toString().trim();
+  if (!q) return res.json([]);
+  try {
+    res.json(await searchTracks(q));
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: err.message });
   }
 });
 

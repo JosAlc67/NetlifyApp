@@ -10,7 +10,7 @@ const MENU = [
   {
     href: "/settings/data",
     label: "Datos y descripción",
-    description: "Nombre, foto de perfil, contacto, curso y biografía.",
+    description: "Nombre, foto de perfil, contacto, curso, biografía y canción favorita.",
     icon: IdCard,
   },
   {

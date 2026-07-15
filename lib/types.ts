@@ -62,6 +62,13 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
 
 export type Theme = "light" | "dark";
 
+export interface FavoriteSong {
+  id: string; // Spotify track id, usado para el reproductor embebido
+  name: string;
+  artist: string;
+  albumArt: string | null;
+}
+
 export interface User {
   id: string;
   fullName: string;
@@ -77,7 +84,7 @@ export interface User {
   curso?: string; // ej. "Ingeniería en Software · Liga B", usado por el ranking "por curso"
   phone?: string;
   bio?: string;
-  favoriteSong?: string;
+  favoriteSong?: FavoriteSong;
   photoUrl?: string;
   anonymous: boolean;
   theme: Theme;
