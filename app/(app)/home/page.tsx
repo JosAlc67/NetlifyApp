@@ -42,23 +42,23 @@ function formatDue(dateIso: string) {
 
 export default function HomePage() {
   const { user, refresh } = useAuth();
+  const userId = user?.id;
   const [pending, setPending] = useState(0);
   const [nextTask, setNextTask] = useState<PendingAssignment | null>(null);
   const [canvasError, setCanvasError] = useState(false);
-  const [greeting, setGreeting] = useState(GREETINGS[0]);
+  const [greeting] = useState(() => GREETINGS[Math.floor(Math.random() * GREETINGS.length)]);
   const [summary, setSummary] = useState<WeeklySummary | null>(null);
 
   useEffect(() => {
-    if (!user) return;
-    setGreeting(GREETINGS[Math.floor(Math.random() * GREETINGS.length)]);
-    setSummary(store.getWeeklySummary(user.id));
+    if (!userId) return;
+    setSummary(store.getWeeklySummary(userId));
 
     let cancelled = false;
     canvasClient
       .fetchAllCoursesWithAssignments()
       .then((data) => {
         if (cancelled) return;
-        canvasClient.syncAllCourses(user.id, data);
+        canvasClient.syncAllCourses(userId, data);
         const pendingList = data
           .flatMap(({ course, assignments }) =>
             assignments
@@ -68,7 +68,7 @@ export default function HomePage() {
           .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
         setPending(pendingList.length);
         setNextTask(pendingList[0] ?? null);
-        setSummary(store.getWeeklySummary(user.id));
+        setSummary(store.getWeeklySummary(userId));
         refresh();
       })
       .catch(() => {
@@ -77,8 +77,7 @@ export default function HomePage() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [userId, refresh]);
 
   if (!user) return null;
 

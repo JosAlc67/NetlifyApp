@@ -121,6 +121,15 @@ export interface Gig {
   contact: string;
 }
 
+export interface NotebookEntry {
+  id: string;
+  userId: string;
+  title: string;
+  content: string;
+  images: string[]; // fotos y dibujos guardados, como data URLs
+  updatedAt: string; // ISO
+}
+
 export interface LevelInfo {
   level: number;
   name: string;

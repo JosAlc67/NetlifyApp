@@ -23,6 +23,7 @@ import {
   GigType,
   DeliveryType,
   LevelInfo,
+  NotebookEntry,
   DEFAULT_NOTIFICATION_PREFS,
   NotificationPrefs,
   Theme,
@@ -35,6 +36,7 @@ const KEYS = {
   pointsLog: "agendify_points_log",
   studyLog: "agendify_study_log",
   gigs: "agendify_gigs",
+  notebook: "agendify_notebook",
 } as const;
 
 function read<T>(key: string, fallback: T): T {
@@ -700,6 +702,40 @@ export function updateGig(gigId: string, patch: Partial<Omit<Gig, "id" | "author
   const updated = gigs.map((g) => (g.id === gigId ? { ...g, ...patch } : g));
   write(KEYS.gigs, updated);
   return updated.find((g) => g.id === gigId);
+}
+
+// ---------- Libreta digital (Ventana 6) ----------
+
+export function getNotebookEntries(userId: string): NotebookEntry[] {
+  return read<NotebookEntry[]>(KEYS.notebook, [])
+    .filter((n) => n.userId === userId)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+export function getNotebookEntry(entryId: string): NotebookEntry | undefined {
+  return read<NotebookEntry[]>(KEYS.notebook, []).find((n) => n.id === entryId);
+}
+
+export function saveNotebookEntry(
+  entry: { id?: string; userId: string; title: string; content: string; images: string[] }
+): NotebookEntry {
+  const all = read<NotebookEntry[]>(KEYS.notebook, []);
+  const updatedAt = new Date().toISOString();
+
+  if (entry.id) {
+    const updated = all.map((n) => (n.id === entry.id ? { ...n, ...entry, updatedAt } : n));
+    write(KEYS.notebook, updated);
+    return updated.find((n) => n.id === entry.id)!;
+  }
+
+  const newEntry: NotebookEntry = { ...entry, id: uid(), updatedAt };
+  write(KEYS.notebook, [...all, newEntry]);
+  return newEntry;
+}
+
+export function deleteNotebookEntry(entryId: string) {
+  const all = read<NotebookEntry[]>(KEYS.notebook, []);
+  write(KEYS.notebook, all.filter((n) => n.id !== entryId));
 }
 
 // ---------- Notifications / theme / privacy (Ventana 9 - Perfil) ----------

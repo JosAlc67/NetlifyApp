@@ -25,7 +25,7 @@ npm run start
 - **Progreso**: racha semanal visual + gráfico de puntos por día (Recharts) — `app/(app)/progress`
 - **Ranking**: liga (Bronce/Plata/Oro) y tabla de posiciones — `app/(app)/ranking`
 - **Emprendimiento**: muro de servicios entre estudiantes — `app/(app)/entrepreneurship`
-- **Agenda física**: página de producto — `app/(app)/agenda`
+- **Libreta digital**: notas con texto, fotos y dibujos (canvas), más un CTA para la agenda física — `app/(app)/agenda`, `app/(app)/agenda/edit`, `components/DrawingCanvas.tsx`
 - **Perfil / resumen semanal** — `app/(app)/profile`
 - **Navegación responsive**: sidebar en desktop/tablet, tab-bar inferior en móvil — `components/AppShell.tsx`
 - **PWA**: `public/manifest.json` + `public/sw.js` (instalable, funciona offline en las rutas visitadas)

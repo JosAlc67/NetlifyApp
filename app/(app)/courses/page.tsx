@@ -9,18 +9,19 @@ import { CourseWithAssignments } from "@/lib/canvas-client";
 
 export default function CoursesPage() {
   const { user, refresh } = useAuth();
+  const userId = user?.id;
   const [data, setData] = useState<CourseWithAssignments[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(
     async (force = false) => {
-      if (!user) return;
+      if (!userId) return;
       setLoading(true);
       setError(null);
       try {
         const result = await canvasClient.fetchAllCoursesWithAssignments({ force });
-        canvasClient.syncAllCourses(user.id, result);
+        canvasClient.syncAllCourses(userId, result);
         setData(result);
         refresh();
       } catch (err) {
@@ -29,7 +30,7 @@ export default function CoursesPage() {
         setLoading(false);
       }
     },
-    [user, refresh]
+    [userId, refresh]
   );
 
   useEffect(() => {

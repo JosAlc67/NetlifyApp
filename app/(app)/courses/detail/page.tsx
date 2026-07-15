@@ -16,6 +16,7 @@ function CourseDetail() {
   const searchParams = useSearchParams();
   const courseId = Number(searchParams.get("id"));
   const { user, refresh } = useAuth();
+  const userId = user?.id;
 
   const [course, setCourse] = useState<CanvasCourse | null | undefined>(undefined);
   const [assignments, setAssignments] = useState<CanvasAssignment[]>([]);
@@ -25,12 +26,12 @@ function CourseDetail() {
 
   const load = useCallback(
     async (force = false) => {
-      if (!user || !courseId) return;
+      if (!userId || !courseId) return;
       setLoading(true);
       setError(null);
       try {
         const data = await canvasClient.fetchAllCoursesWithAssignments({ force });
-        canvasClient.syncAllCourses(user.id, data);
+        canvasClient.syncAllCourses(userId, data);
         const entry = data.find((d) => d.course.id === courseId);
         setCourse(entry?.course ?? null);
         setAssignments(entry?.assignments ?? []);
@@ -41,7 +42,7 @@ function CourseDetail() {
         setLoading(false);
       }
     },
-    [user, courseId, refresh]
+    [userId, courseId, refresh]
   );
 
   useEffect(() => {
