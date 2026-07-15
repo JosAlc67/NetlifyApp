@@ -19,6 +19,15 @@ app.use(
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
+// Traduce el error crudo de Canvas a algo accionable, en vez de un genérico
+// "no se pudo conectar" que obliga a revisar los logs de Render para saber qué pasó.
+function friendlyCanvasError(err) {
+  if (/401|Invalid access token/i.test(err.message)) {
+    return "El token de Canvas ya no es válido. Genera uno nuevo en Canvas y actualiza CANVAS_TOKEN en Render.";
+  }
+  return err.message;
+}
+
 // Protege el resto de las rutas con una clave compartida simple: sin esto,
 // cualquiera que encuentre la URL de este servicio podría gastar tu cupo
 // de llamadas a Canvas usando tu token.
@@ -47,7 +56,7 @@ app.get("/api/courses", async (_req, res) => {
     );
   } catch (err) {
     console.error(err);
-    res.status(502).json({ error: err.message });
+    res.status(502).json({ error: friendlyCanvasError(err) });
   }
 });
 
@@ -70,7 +79,7 @@ app.get("/api/courses/:id/assignments", async (req, res) => {
     );
   } catch (err) {
     console.error(err);
-    res.status(502).json({ error: err.message });
+    res.status(502).json({ error: friendlyCanvasError(err) });
   }
 });
 

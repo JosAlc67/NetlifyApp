@@ -26,7 +26,8 @@ async function apiFetch<T>(path: string): Promise<T> {
 
   const res = await fetch(`${base}${path}`, { headers });
   if (!res.ok) {
-    throw new Error(`No se pudo conectar con Canvas (error ${res.status}).`);
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error ?? `No se pudo conectar con Canvas (error ${res.status}).`);
   }
   return res.json() as Promise<T>;
 }
@@ -77,9 +78,12 @@ export function fetchAllCoursesWithAssignments(
   })();
 
   inFlight = promise;
+  // .finally() derives a new promise; without a no-op .catch() here, a
+  // rejection would show up as a separate "unhandled rejection" even though
+  // the original `promise` returned below is properly handled by the caller.
   promise.finally(() => {
     inFlight = null;
-  });
+  }).catch(() => {});
   return promise;
 }
 

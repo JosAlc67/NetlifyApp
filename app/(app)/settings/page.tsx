@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Crown, IdCard, Bell, EyeOff, Palette, LogOut } from "lucide-react";
+import { Camera, ChevronRight, Crown, IdCard, Bell, EyeOff, Palette, LogOut } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import * as store from "@/lib/store";
 
@@ -10,7 +10,7 @@ const MENU = [
   {
     href: "/settings/data",
     label: "Datos y descripción",
-    description: "Nombre, contacto, curso y biografía.",
+    description: "Nombre, foto de perfil, contacto, curso y biografía.",
     icon: IdCard,
   },
   {
@@ -56,14 +56,19 @@ export default function SettingsPage() {
 
       <div className="rounded-2xl border border-border bg-surface p-5 mb-6 flex flex-col sm:flex-row sm:items-center gap-4">
         <div className="flex items-center gap-3 flex-1 min-w-0">
-          {user.photoUrl && !user.anonymous ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={user.photoUrl} alt="" className="w-14 h-14 rounded-full object-cover shrink-0" />
-          ) : (
-            <div className="w-14 h-14 rounded-full bg-primary text-white flex items-center justify-center font-display font-bold text-lg shrink-0">
-              {user.anonymous ? "?" : initials(user.fullName)}
-            </div>
-          )}
+          <Link href="/settings/data" className="relative shrink-0 group" aria-label="Cambiar foto de perfil">
+            {user.photoUrl && !user.anonymous ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={user.photoUrl} alt="" className="w-14 h-14 rounded-full object-cover" />
+            ) : (
+              <div className="w-14 h-14 rounded-full bg-primary text-white flex items-center justify-center font-display font-bold text-lg">
+                {user.anonymous ? "?" : initials(user.fullName)}
+              </div>
+            )}
+            <span className="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-ink text-white flex items-center justify-center border-2 border-surface group-hover:bg-primary transition-colors">
+              <Camera size={10} />
+            </span>
+          </Link>
           <div className="min-w-0">
             <p className="font-display font-bold text-navy truncate">
               {user.anonymous ? "Anónimo" : user.fullName}
