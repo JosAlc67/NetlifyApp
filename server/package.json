@@ -1,0 +1,18 @@
+{
+  "name": "agendify-canvas-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend mínimo que protege el Personal Access Token de Canvas y expone cursos/tareas a la app Agendify.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  }
+}
