@@ -13,22 +13,24 @@ export default function CoursesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await canvasClient.fetchAllCoursesWithAssignments();
-      canvasClient.syncAllCourses(user.id, result);
-      setData(result);
-      refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo conectar con Canvas.");
-    } finally {
-      setLoading(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  const load = useCallback(
+    async (force = false) => {
+      if (!user) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await canvasClient.fetchAllCoursesWithAssignments({ force });
+        canvasClient.syncAllCourses(user.id, result);
+        setData(result);
+        refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "No se pudo conectar con Canvas.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [user, refresh]
+  );
 
   useEffect(() => {
     load();
@@ -39,7 +41,7 @@ export default function CoursesPage() {
       <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
         <h1 className="font-display text-2xl font-bold text-navy">Mis cursos</h1>
         <button
-          onClick={load}
+          onClick={() => load(true)}
           disabled={loading}
           className="shrink-0 flex items-center gap-1.5 rounded-full bg-primary-soft text-navy text-sm font-semibold px-4 py-2 hover:opacity-90 transition-opacity disabled:opacity-50"
         >

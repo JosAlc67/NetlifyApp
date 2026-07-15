@@ -23,27 +23,26 @@ function CourseDetail() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("pendientes");
 
-  const load = useCallback(async () => {
-    if (!user || !courseId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const courses = await canvasClient.fetchCourses();
-      const found = courses.find((c) => c.id === courseId) ?? null;
-      setCourse(found);
-      if (found) {
-        const list = await canvasClient.fetchCourseAssignments(courseId);
-        canvasClient.syncCourseAssignments(user.id, found, list);
-        setAssignments(list);
+  const load = useCallback(
+    async (force = false) => {
+      if (!user || !courseId) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await canvasClient.fetchAllCoursesWithAssignments({ force });
+        canvasClient.syncAllCourses(user.id, data);
+        const entry = data.find((d) => d.course.id === courseId);
+        setCourse(entry?.course ?? null);
+        setAssignments(entry?.assignments ?? []);
         refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "No se pudo conectar con Canvas.");
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo conectar con Canvas.");
-    } finally {
-      setLoading(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, courseId]);
+    },
+    [user, courseId, refresh]
+  );
 
   useEffect(() => {
     load();
@@ -141,7 +140,7 @@ function CourseDetail() {
           </div>
         </div>
         <button
-          onClick={load}
+          onClick={() => load(true)}
           disabled={loading}
           className="shrink-0 flex items-center gap-1.5 rounded-full bg-primary-soft text-navy text-sm font-semibold px-4 py-2 hover:opacity-90 transition-opacity disabled:opacity-50"
         >

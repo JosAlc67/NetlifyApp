@@ -44,15 +44,43 @@ export interface CourseWithAssignments {
   assignments: CanvasAssignment[];
 }
 
+// Cada pantalla (Home, lista de Cursos, detalle) pedía todo de nuevo a Canvas
+// en cada navegación, lo que se sentía lento incluso con el backend despierto.
+// Esta caché en memoria evita repetir esas llamadas al navegar entre pantallas
+// dentro de la misma visita; los botones "Sincronizar/Actualizar" fuerzan una
+// recarga real con { force: true }.
+const CACHE_TTL_MS = 90_000;
+let cache: { data: CourseWithAssignments[]; timestamp: number } | null = null;
+let inFlight: Promise<CourseWithAssignments[]> | null = null;
+
 /** Trae todos los cursos activos junto con sus tareas, en una sola llamada. */
-export async function fetchAllCoursesWithAssignments(): Promise<CourseWithAssignments[]> {
-  const courses = await fetchCourses();
-  return Promise.all(
-    courses.map(async (course) => ({
-      course,
-      assignments: await fetchCourseAssignments(course.id),
-    }))
-  );
+export function fetchAllCoursesWithAssignments(
+  opts?: { force?: boolean }
+): Promise<CourseWithAssignments[]> {
+  const force = opts?.force ?? false;
+
+  if (!force && cache && Date.now() - cache.timestamp < CACHE_TTL_MS) {
+    return Promise.resolve(cache.data);
+  }
+  if (!force && inFlight) return inFlight;
+
+  const promise = (async () => {
+    const courses = await fetchCourses();
+    const data = await Promise.all(
+      courses.map(async (course) => ({
+        course,
+        assignments: await fetchCourseAssignments(course.id),
+      }))
+    );
+    cache = { data, timestamp: Date.now() };
+    return data;
+  })();
+
+  inFlight = promise;
+  promise.finally(() => {
+    inFlight = null;
+  });
+  return promise;
 }
 
 /**
