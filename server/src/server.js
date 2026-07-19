@@ -137,6 +137,18 @@ app.post("/api/auth/register", async (req, res) => {
     if (!result?.id) {
       return res.status(400).json({ error: "No se pudo crear la cuenta." });
     }
+    // Cuando el correo ya está registrado, Supabase (con "prevent user
+    // enumeration" activo, el default) responde con un id inventado en vez
+    // de un error, para no revelar si la cuenta existe. La señal es
+    // `identities` vacío y sin sesión — ahí no hay ningún usuario real al
+    // que engancharle un perfil, así que no lo intentamos.
+    const isRealNewUser = result.session || (result.identities && result.identities.length > 0);
+    if (!isRealNewUser) {
+      return res.json({
+        pendingConfirmation: true,
+        message: "Si ese correo no tenía cuenta, te enviamos un correo de confirmación. Si ya la tenías, revisa tu bandeja o inicia sesión.",
+      });
+    }
     await db.upsertProfile(result.id, { fullName, email: normalizedEmail });
     if (result.session) {
       // El proyecto de Supabase tiene desactivada la confirmación de correo:
