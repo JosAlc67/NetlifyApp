@@ -21,4 +21,19 @@ jobs:
     steps:
       - name: Llamar a /api/alarms/check
         run: |
-          curl -sS -f "${{ secrets.BACKEND_URL }}/api/alarms/check?secret=${{ secrets.CRON_SECRET }}"
+          url="${{ secrets.BACKEND_URL }}/api/alarms/check?secret=${{ secrets.CRON_SECRET }}"
+          for attempt in 1 2 3; do
+            status=$(curl -sS -o /tmp/response.txt -w "%{http_code}" "$url" || echo "000")
+            echo "Intento $attempt: HTTP $status"
+            cat /tmp/response.txt
+            echo
+            if [ "$status" = "200" ]; then
+              exit 0
+            fi
+            # Un 502/000 suele ser Render "despertando" el servicio gratis
+            # tras estar dormido; se reintenta antes de darlo por fallido.
+            echo "Reintentando en 20s..."
+            sleep 20
+          done
+          echo "Falló después de 3 intentos."
+          exit 1
