@@ -1,21 +1,27 @@
 "use client";
 
-const MAX_SOUND_BYTES = 1.5 * 1024 * 1024; // límite generoso para no reventar la cuota de localStorage
+import { saveSoundFile } from "./sound-storage";
+import { NotificationSound } from "./types";
 
-/** Lee un archivo de audio como data URL para guardarlo como sonido de notificación. */
-export function fileToSoundDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    if (!file.type.startsWith("audio/")) {
-      reject(new Error("Elige un archivo de audio."));
-      return;
-    }
-    if (file.size > MAX_SOUND_BYTES) {
-      reject(new Error("El archivo pesa demasiado (máximo 1.5 MB)."));
-      return;
-    }
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("No se pudo leer el archivo."));
-    reader.onload = () => resolve(reader.result as string);
-    reader.readAsDataURL(file);
-  });
+// Se guarda en IndexedDB (ver sound-storage.ts), que soporta cientos de MB —
+// este límite es solo para evitar subir algo absurdamente grande por error,
+// no una restricción real de dónde vive el archivo. Una canción completa en
+// mp3 (~3-5 min) normalmente pesa 3-8MB, así que entra sin problema.
+const MAX_SOUND_BYTES = 20 * 1024 * 1024;
+
+function uid() {
+  return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+}
+
+/** Guarda un archivo de audio subido por el usuario y devuelve el NotificationSound listo para usar. */
+export async function uploadSoundFile(file: File): Promise<NotificationSound> {
+  if (!file.type.startsWith("audio/")) {
+    throw new Error("Elige un archivo de audio.");
+  }
+  if (file.size > MAX_SOUND_BYTES) {
+    throw new Error("El archivo pesa demasiado (máximo 20 MB).");
+  }
+  const id = `upload-${uid()}`;
+  await saveSoundFile(id, file);
+  return { source: "upload", id, label: file.name, url: null };
 }

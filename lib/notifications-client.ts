@@ -2,23 +2,50 @@
 
 import * as store from "./store";
 import { NotificationPrefs, PersonalTask } from "./types";
+import { getSoundFile } from "./sound-storage";
+import { getSpotifyAccessToken } from "./spotify-auth";
+import { playSpotifyTrack } from "./spotify-player";
 
 // Aviso "mientras la app esté abierta": funciona ya, sin infraestructura nueva.
 // Es el nivel base bajo el sistema de notificaciones push real (que sí avisa
 // con la app cerrada, una vez conectado el backend).
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
+// Solo suena mientras la app está abierta (aunque sea en otra pestaña): los
+// navegadores no exponen forma de personalizar el sonido de una notificación
+// push cuando la app está cerrada, siempre usan el del sistema. Además,
+// reproducir audio sin una interacción previa del usuario puede estar
+// bloqueado por la política de autoplay del navegador — se intenta y, si el
+// navegador lo bloquea, se falla en silencio en vez de tumbar la pantalla.
+async function playNotificationSound(sound: NotificationPrefs["sound"]) {
+  try {
+    if (sound.source === "spotify-full") {
+      await playSpotifyTrack(sound.id, getSpotifyAccessToken);
+      return;
+    }
+    if (sound.source === "upload") {
+      const blob = await getSoundFile(sound.id);
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.onended = () => URL.revokeObjectURL(url);
+      await audio.play();
+      return;
+    }
+    if (sound.url) {
+      await new Audio(sound.url).play();
+    }
+  } catch (err) {
+    console.error("No se pudo reproducir el sonido de la notificación:", err);
+  }
+}
+
 function fireNotification(task: PersonalTask, prefs: NotificationPrefs) {
   if (prefs.vibration && typeof navigator !== "undefined" && "vibrate" in navigator) {
     navigator.vibrate(200);
   }
-  // Solo suena mientras la app está abierta (aunque sea en otra pestaña): los
-  // navegadores no exponen forma de personalizar el sonido de una
-  // notificación push cuando la app está cerrada, siempre usan el del
-  // sistema. Además, reproducir audio sin una interacción previa del usuario
-  // puede estar bloqueado por la política de autoplay del navegador.
-  if (prefs.sound.url && typeof Audio !== "undefined") {
-    new Audio(prefs.sound.url).play().catch(() => {});
+  if (typeof Audio !== "undefined") {
+    playNotificationSound(prefs.sound);
   }
   if (typeof Notification !== "undefined" && Notification.permission === "granted") {
     new Notification("Agendify", { body: task.title, tag: task.id });

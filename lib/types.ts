@@ -68,17 +68,25 @@ export type NotificationRepeat = "none" | "5min" | "15min" | "30min";
 
 // ---------- Sonido de notificación ----------
 // Suena de verdad cuando la app está abierta (aunque sea en otra pestaña):
-// se reproduce con <audio> justo cuando se dispara el aviso. Los navegadores
-// no dejan personalizar el sonido de las notificaciones push cuando la app
-// está cerrada (siempre usan el sonido del sistema) — esa parte no depende
-// de nosotros, es una limitación de la Web Notifications API.
-export type NotificationSoundSource = "preset" | "upload" | "spotify";
+// se reproduce justo cuando se dispara el aviso. Los navegadores no dejan
+// personalizar el sonido de las notificaciones push cuando la app está
+// cerrada (siempre usan el sonido del sistema) — esa parte no depende de
+// nosotros, es una limitación de la Web Notifications API.
+//
+// "upload" guarda el archivo en IndexedDB (no en localStorage, que tiene
+// muy poca cuota) — `url` queda null y se resuelve al reproducir, ver
+// lib/sound-storage.ts. "spotify-preview" es el clip de 30s que da la API
+// pública de Spotify (reproducible con <audio>, sin login). "spotify-full"
+// reproduce la canción completa vía el Web Playback SDK de Spotify: exige
+// que el usuario inicie sesión con su cuenta de Spotify y que sea Premium
+// (restricción de Spotify, no nuestra) — ver lib/spotify-player.ts.
+export type NotificationSoundSource = "preset" | "upload" | "spotify-preview" | "spotify-full";
 
 export interface NotificationSound {
   source: NotificationSoundSource;
-  id: string; // id del preset, "upload", o el id de la canción en Spotify
+  id: string; // id del preset, del archivo en IndexedDB, o id de la canción en Spotify
   label: string; // nombre a mostrar
-  url: string | null; // reproducible; null = silencioso
+  url: string | null; // reproducible directo con <audio>; null si es "upload" o "spotify-full"
 }
 
 export const SOUND_PRESETS: NotificationSound[] = [
