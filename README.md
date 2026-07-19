@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-Abre http://localhost:3000. Puedes registrar una cuenta nueva; en la ventana "Tareas" cada usuario pega su propio Personal Access Token de Canvas para sincronizar (ver `server/README.md` para desplegar el backend).
+Abre http://localhost:3000. El registro/login es real (Supabase Auth) y solo admite correos `usuario@espol.edu.ec` — Supabase manda un correo de confirmación y la cuenta no puede iniciar sesión hasta que se confirme, así se valida que el correo existe de verdad (ver `server/README.md`, sección "Habilitar el registro/login real"). En la ventana "Tareas" cada usuario pega su propio Personal Access Token de Canvas para sincronizar.
 
 Para producción:
 
@@ -20,7 +20,7 @@ npm run start
 
 ## Qué incluye este MVP
 
-- **Autenticación** (registro/login) — `app/login`, `app/register`
+- **Autenticación real** (registro/login contra Supabase Auth, restringida a correos `@espol.edu.ec` con confirmación por correo) — `app/login`, `app/register`, `lib/auth-client.ts`, backend en `server/src/supabaseAuth.js`
 - **Tareas**: pestañas Todas (combinado, por día) / Cursos (navegación por curso) / Personal, sincronizado desde Canvas con el token propio de cada usuario — `app/(app)/tasks`, `lib/canvas-client.ts`, backend en `server/`. Las tareas personales pueden avisar con notificación push real aunque la app esté cerrada (ver `server/README.md` — requiere Supabase + VAPID + el cron en `.github/workflows/check-alarms.yml`).
 - **Progreso**: racha semanal visual + gráfico de puntos por día (Recharts) — `app/(app)/progress`
 - **Ranking**: liga (Bronce/Plata/Oro) y tabla de posiciones — `app/(app)/ranking`
@@ -32,9 +32,9 @@ npm run start
 
 ## Arquitectura de datos (importante para tu próxima iteración)
 
-Todo el "backend" vive en **`lib/store.ts`**, usando `localStorage` como base de datos temporal. Esto fue deliberado para que el MVP funcione 100% sin servidor mientras validan la interfaz y el flujo — pero **no es apto para producción real** (los datos no se sincronizan entre dispositivos, y la autenticación es solo una demo, sin hashing seguro real).
+La **autenticación ya es real**: `lib/auth-client.ts` habla con `server/src/supabaseAuth.js`, que a su vez usa Supabase Auth (contraseñas con hashing real, sesión con tokens, correo `@espol.edu.ec` obligatorio y confirmado por correo). El resto del "backend" — tareas, puntos, racha, notas, tienda, tema, token de Canvas — sigue viviendo en **`lib/store.ts`**, usando `localStorage` como base de datos por dispositivo. Esto fue deliberado para que el MVP funcione 100% sin servidor mientras validan la interfaz y el flujo — pero **no es apto para producción real** (esos datos no se sincronizan entre dispositivos).
 
-Cuando quieran conectar un backend real (Firebase o Supabase, como se propuso en la presentación), solo necesitan reescribir las funciones de `lib/store.ts` (`getTasks`, `addTask`, `completeTask`, `loginUser`, etc.) para que llamen a la API real. Ningún componente toca `localStorage` directamente, así que el resto de la app no debería cambiar.
+Cuando quieran mover también esos datos a un backend real, solo necesitan reescribir las funciones de `lib/store.ts` (`getTasks`, `addTask`, `completeTask`, etc.) para que llamen a la API real, siguiendo el mismo patrón que ya usan `push_subscriptions`/`personal_alarms`/`profiles` en Supabase. Ningún componente toca `localStorage` directamente, así que el resto de la app no debería cambiar.
 
 ## Notas de diseño
 
@@ -44,8 +44,7 @@ Cuando quieran conectar un backend real (Firebase o Supabase, como se propuso en
 
 ## Próximos pasos sugeridos
 
-1. Conectar Firebase/Supabase Auth (login con correo institucional) y Firestore/Postgres para tareas y puntos.
+1. Mover tareas y puntos a Postgres (Supabase), siguiendo el mismo patrón que ya usan la autenticación, las alarmas y las suscripciones push, para que se sincronicen entre dispositivos.
 2. Sustituir el ranking y el muro de emprendimiento (datos mock) por datos reales multi-usuario.
 3. Generar íconos PWA definitivos con la identidad de marca (los actuales en `public/icons/` son un placeholder simple).
-4. Configurar notificaciones push reales (Firebase Cloud Messaging) para los recordatorios de tareas.
-5. Integrar pasarela de pago (Stripe/PayPal) para el plan Plus y la agenda física.
+4. Integrar pasarela de pago (Stripe/PayPal) para el plan Plus y la agenda física.

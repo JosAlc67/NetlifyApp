@@ -6,6 +6,7 @@ const { getCreditsForCourse } = require("./credits");
 const { searchTracks } = require("./spotify");
 const db = require("./db");
 const { sendPush } = require("./push");
+const supabaseAuth = require("./supabaseAuth");
 
 const app = express();
 app.use(express.json());
@@ -88,6 +89,129 @@ app.use((req, res, next) => {
     return res.status(401).json({ error: "API key inválida o faltante." });
   }
   next();
+});
+
+// ---------- Autenticación (Supabase Auth) ----------
+// Solo se permite registrarse/iniciar sesión con correo institucional real
+// (usuario@espol.edu.ec). La existencia real del correo la garantiza
+// Supabase enviando un enlace de confirmación: la cuenta no puede iniciar
+// sesión hasta que alguien con acceso real a esa bandeja de entrada lo abra.
+const ESPOL_EMAIL_RE = /^[a-z0-9._%+-]+@espol\.edu\.ec$/i;
+
+function friendlyAuthError(err) {
+  const msg = err.message || "";
+  if (/Email not confirmed/i.test(msg)) {
+    return "Todavía no confirmas tu correo. Revisa tu bandeja de entrada (o spam) y haz clic en el enlace que te enviamos.";
+  }
+  if (/Invalid login credentials/i.test(msg)) {
+    return "Correo o contraseña incorrectos.";
+  }
+  if (/User already registered/i.test(msg)) {
+    return "Ya existe una cuenta con ese correo. Inicia sesión, o usa 'reenviar confirmación' si aún no la activaste.";
+  }
+  if (/Password should be at least/i.test(msg)) {
+    return "La contraseña debe tener al menos 6 caracteres.";
+  }
+  return msg || "No se pudo completar la operación.";
+}
+
+function toSession(supabaseSession) {
+  return {
+    accessToken: supabaseSession.access_token,
+    refreshToken: supabaseSession.refresh_token,
+    expiresAt: Date.now() + supabaseSession.expires_in * 1000,
+  };
+}
+
+app.post("/api/auth/register", async (req, res) => {
+  const { fullName, email, password } = req.body || {};
+  if (!fullName || !email || !password) {
+    return res.status(400).json({ error: "Falta fullName, email o password." });
+  }
+  const normalizedEmail = String(email).trim().toLowerCase();
+  if (!ESPOL_EMAIL_RE.test(normalizedEmail)) {
+    return res.status(400).json({ error: "Debes registrarte con tu correo institucional (usuario@espol.edu.ec)." });
+  }
+  try {
+    const result = await supabaseAuth.signUp(normalizedEmail, password, fullName);
+    if (!result?.id) {
+      return res.status(400).json({ error: "No se pudo crear la cuenta." });
+    }
+    await db.upsertProfile(result.id, { fullName, email: normalizedEmail });
+    if (result.session) {
+      // El proyecto de Supabase tiene desactivada la confirmación de correo:
+      // no hay nada más que verificar, así que entra directo.
+      return res.json({
+        session: toSession(result.session),
+        profile: { id: result.id, fullName, email: normalizedEmail },
+      });
+    }
+    res.json({
+      pendingConfirmation: true,
+      message: "Te enviamos un correo a tu cuenta de ESPOL. Ábrelo y confirma tu cuenta antes de iniciar sesión.",
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(err.status && err.status < 500 ? 400 : 502).json({ error: friendlyAuthError(err) });
+  }
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  const { email, password } = req.body || {};
+  if (!email || !password) return res.status(400).json({ error: "Falta email o password." });
+  const normalizedEmail = String(email).trim().toLowerCase();
+  if (!ESPOL_EMAIL_RE.test(normalizedEmail)) {
+    return res.status(400).json({ error: "Debes iniciar sesión con tu correo institucional (usuario@espol.edu.ec)." });
+  }
+  try {
+    const result = await supabaseAuth.signInWithPassword(normalizedEmail, password);
+    let profile = await db.getProfile(result.user.id);
+    if (!profile) {
+      profile = await db.upsertProfile(result.user.id, {
+        fullName: result.user.user_metadata?.full_name || normalizedEmail,
+        email: normalizedEmail,
+      });
+    }
+    res.json({
+      session: toSession(result),
+      profile: { id: profile.id, fullName: profile.full_name, email: profile.email },
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(err.status && err.status < 500 ? 401 : 502).json({ error: friendlyAuthError(err) });
+  }
+});
+
+app.post("/api/auth/resend", async (req, res) => {
+  const normalizedEmail = String(req.body?.email || "").trim().toLowerCase();
+  if (!ESPOL_EMAIL_RE.test(normalizedEmail)) {
+    return res.status(400).json({ error: "Correo inválido." });
+  }
+  try {
+    await supabaseAuth.resend(normalizedEmail);
+    res.json({ message: "Si la cuenta existe, te reenviamos el correo de confirmación." });
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: friendlyAuthError(err) });
+  }
+});
+
+app.post("/api/auth/refresh", async (req, res) => {
+  const { refreshToken } = req.body || {};
+  if (!refreshToken) return res.status(400).json({ error: "Falta refreshToken." });
+  try {
+    const result = await supabaseAuth.refreshSession(refreshToken);
+    res.json(toSession(result));
+  } catch (err) {
+    res.status(401).json({ error: "Sesión expirada, inicia sesión de nuevo." });
+  }
+});
+
+app.post("/api/auth/logout", async (req, res) => {
+  const auth = req.header("authorization") || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+  if (token) await supabaseAuth.signOut(token).catch(() => {});
+  res.status(204).end();
 });
 
 app.get("/api/courses", async (req, res) => {

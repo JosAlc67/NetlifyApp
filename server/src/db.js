@@ -95,6 +95,25 @@ function markAlarmNotified(alarmId) {
   });
 }
 
+// ---------- profiles ----------
+// Solo guarda lo mínimo para identificar la cuenta real (Supabase Auth ya
+// guarda el email y el password hash); el resto del perfil (puntos, racha,
+// tema, token de Canvas, etc.) sigue viviendo en localStorage por dispositivo.
+
+async function getProfile(userId) {
+  const rows = await request(`/profiles?id=eq.${encodeURIComponent(userId)}&select=*`, { method: "GET" });
+  return rows?.[0] ?? null;
+}
+
+async function upsertProfile(userId, { fullName, email }) {
+  const rows = await request("/profiles?on_conflict=id", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+    body: JSON.stringify({ id: userId, full_name: fullName, email }),
+  });
+  return rows?.[0] ?? null;
+}
+
 module.exports = {
   upsertPushSubscription,
   deletePushSubscription,
@@ -104,4 +123,6 @@ module.exports = {
   deleteAlarm,
   getDueAlarms,
   markAlarmNotified,
+  getProfile,
+  upsertProfile,
 };

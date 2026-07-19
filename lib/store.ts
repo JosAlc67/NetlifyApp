@@ -61,18 +61,13 @@ function uid() {
 }
 
 // ---------- Users / Auth ----------
-
-// NOTE: this is a client-side demo "hash" for the prototype only.
-// A real deployment must never store or compare passwords like this —
-// authentication should move to a real backend (Firebase Auth / Supabase Auth).
-function demoHash(pw: string) {
-  let h = 0;
-  for (let i = 0; i < pw.length; i++) {
-    h = (h << 5) - h + pw.charCodeAt(i);
-    h |= 0;
-  }
-  return `demo_${h}`;
-}
+//
+// La autenticación real (contraseñas, verificación de correo @espol.edu.ec)
+// vive en el backend (server/src/server.js -> Supabase Auth), ver
+// lib/auth-client.ts. Aquí solo se cachea, por dispositivo, el perfil y los
+// datos de gamificación (puntos, racha, tema, etc.) de la cuenta ya
+// autenticada — igual que antes, pero indexado por el id real que asigna
+// Supabase en vez de un id generado localmente.
 
 // Backfills fields added after a user was first created, so accounts
 // persisted before those fields existed don't crash on undefined access.
@@ -90,22 +85,24 @@ export function getUsers(): User[] {
   return read<User[]>(KEYS.users, []).map(normalizeUser);
 }
 
-export function findUserByEmail(email: string): User | undefined {
-  return getUsers().find(
-    (u) => u.email.toLowerCase() === email.toLowerCase()
-  );
-}
-
-export function registerUser(fullName: string, email: string, password: string) {
+/**
+ * Crea (o actualiza el nombre/correo de) el perfil local para una cuenta ya
+ * autenticada contra el backend. Se llama justo después de un login/registro
+ * exitoso; si el perfil ya existía en este dispositivo, conserva sus puntos,
+ * racha y demás datos de gamificación en vez de reiniciarlos.
+ */
+export function upsertLocalUser(id: string, fullName: string, email: string): User {
   const users = getUsers();
-  if (findUserByEmail(email)) {
-    throw new Error("Ya existe una cuenta con ese correo.");
+  const existing = users.find((u) => u.id === id);
+  if (existing) {
+    const merged: User = { ...existing, fullName, email };
+    write(KEYS.users, users.map((u) => (u.id === id ? merged : u)));
+    return merged;
   }
   const user: User = {
-    id: uid(),
+    id,
     fullName,
     email,
-    passwordHash: demoHash(password),
     createdAt: new Date().toISOString(),
     points: 0,
     streak: 0,
@@ -116,16 +113,6 @@ export function registerUser(fullName: string, email: string, password: string) 
     notificationPrefs: { ...DEFAULT_NOTIFICATION_PREFS },
   };
   write(KEYS.users, [...users, user]);
-  setSession(user.id);
-  return user;
-}
-
-export function loginUser(email: string, password: string) {
-  const user = findUserByEmail(email);
-  if (!user || user.passwordHash !== demoHash(password)) {
-    throw new Error("Correo o contraseña incorrectos.");
-  }
-  setSession(user.id);
   return user;
 }
 

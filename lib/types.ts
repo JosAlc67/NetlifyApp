@@ -93,7 +93,6 @@ export interface User {
   id: string;
   fullName: string;
   email: string;
-  passwordHash: string;
   createdAt: string;
   points: number;
   streak: number;

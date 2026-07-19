@@ -23,10 +23,16 @@ variables de entorno.
   (crea una app gratis, no requiere aprobación de nadie). Se usan solo para
   buscar en el catálogo público de Spotify (Client Credentials flow); no
   necesitas que el usuario inicie sesión en Spotify.
-- `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` — de tu proyecto gratis en
-  [supabase.com](https://supabase.com) (Project Settings → API; usa la
-  **service_role key**, no la "anon"). Guardan las suscripciones push y las
-  alarmas de tareas personales pendientes — ver "Base de datos" abajo.
+- `SUPABASE_URL` — de tu proyecto gratis en [supabase.com](https://supabase.com)
+  (Project Settings → API).
+- `SUPABASE_SERVICE_KEY` — la **service_role key** de ese mismo panel. Se usa
+  para leer/escribir directamente las tablas (suscripciones push, alarmas,
+  perfiles) — nunca sale de este servidor.
+- `SUPABASE_ANON_KEY` — la **anon key** (pública) del mismo panel. Se usa
+  para hablar con Supabase Auth (registro/login/confirmación de correo) tal
+  como lo haría un navegador. No es secreta, pero igual vive solo aquí: el
+  frontend nunca la recibe, así que la restricción de correo @espol.edu.ec
+  que aplica este backend antes de reenviar la petición no se puede saltar.
 - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` — el par de
   llaves que identifican a tu servidor ante los servicios de notificaciones
   push del navegador (protocolo Web Push estándar). Genéralas una sola vez:
@@ -65,14 +71,55 @@ create table personal_alarms (
   notified boolean default false,
   created_at timestamptz default now()
 );
+
+create table profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  full_name text not null,
+  email text not null,
+  created_at timestamptz default now()
+);
 ```
 
-Nada más de tus datos vive en Supabase — solo lo necesario para poder
-avisarte con la app cerrada.
+`profiles` guarda solo el nombre y correo de la cuenta real (Supabase Auth ya
+guarda el correo y la contraseña con hashing seguro). Puntos, racha, tema,
+token de Canvas, tareas, notas, etc. siguen viviendo en `localStorage` del
+dispositivo, exactamente igual que antes — solo el registro/login pasó a ser
+real.
+
+### Habilitar el registro/login real (Supabase Auth)
+
+En tu proyecto de Supabase → **Authentication → Providers → Email**, confirma
+que **"Confirm email"** esté activado (lo está por defecto en proyectos
+nuevos): es lo que obliga a que alguien con acceso real a la bandeja
+`usuario@espol.edu.ec` haga clic en el enlace de confirmación antes de poder
+iniciar sesión — así se valida que el correo existe de verdad, no solo el
+formato.
+
+El correo de confirmación lo manda automáticamente el servicio de correo
+integrado de Supabase, sin configuración adicional. Ese servicio tiene un
+límite bajo de envíos por hora pensado solo para pruebas: si vas a dejar que
+varias personas prueben la demo a la vez, configura tu propio SMTP en
+**Authentication → Settings → SMTP Settings** (Supabase lo documenta en su
+propia web) para no toparte con el límite.
 
 ## Endpoints
 
 - `GET /health` — chequeo simple, no requiere API key.
+- `POST /api/auth/register` — body `{ fullName, email, password }`; solo
+  admite correos `@espol.edu.ec`. Crea la cuenta en Supabase Auth y manda el
+  correo de confirmación; responde `{ pendingConfirmation: true, message }`
+  (o, si el proyecto tiene la confirmación desactivada, `{ session, profile }`
+  con sesión inmediata).
+- `POST /api/auth/login` — body `{ email, password }`; responde
+  `{ session: { accessToken, refreshToken, expiresAt }, profile: { id, fullName, email } }`,
+  o un error 401 con mensaje legible (correo/contraseña incorrectos, correo
+  sin confirmar, etc.).
+- `POST /api/auth/resend` — body `{ email }`; reenvía el correo de
+  confirmación.
+- `POST /api/auth/refresh` — body `{ refreshToken }`; renueva la sesión
+  cuando el access token vence (dura 1 hora).
+- `POST /api/auth/logout` — header `Authorization: Bearer <accessToken>`;
+  invalida la sesión en Supabase.
 - `GET /api/courses` — cursos activos del período actual, con créditos
   (ver `src/credits.js` — usa un valor por defecto hasta que definas el
   listado real de materias/créditos). Requiere el header `x-canvas-token`

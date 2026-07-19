@@ -1,26 +1,53 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Logo } from "@/components/Logo";
 import { useAuth } from "@/lib/auth-context";
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, resendConfirmation } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
+  const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
+  const [justConfirmed, setJustConfirmed] = useState(false);
 
-  function handleSubmit(e: React.FormEvent) {
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("confirmed") === "1") setJustConfirmed(true);
+  }, []);
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setNeedsConfirmation(false);
+    setResendState("idle");
+    setSubmitting(true);
     try {
-      login(email, password);
+      await login(email, password);
       router.push("/home");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo iniciar sesión.");
+      const message = err instanceof Error ? err.message : "No se pudo iniciar sesión.";
+      setError(message);
+      if (/confirm/i.test(message)) setNeedsConfirmation(true);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleResend() {
+    setResendState("sending");
+    try {
+      await resendConfirmation(email);
+      setResendState("sent");
+    } catch {
+      setResendState("idle");
     }
   }
 
@@ -36,6 +63,12 @@ export default function LoginPage() {
         <p className="text-sm text-text-muted mb-6">
           Inicia sesión y sigue tu racha donde la dejaste.
         </p>
+
+        {justConfirmed && (
+          <p className="mb-4 rounded-lg bg-green-50 text-green-700 text-sm px-3 py-2">
+            Tu correo fue confirmado. Ya puedes iniciar sesión.
+          </p>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -63,11 +96,27 @@ export default function LoginPage() {
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 
+          {needsConfirmation && (
+            <button
+              type="button"
+              onClick={handleResend}
+              disabled={resendState !== "idle"}
+              className="text-xs font-semibold text-primary disabled:opacity-60"
+            >
+              {resendState === "sent"
+                ? "Correo reenviado ✓"
+                : resendState === "sending"
+                  ? "Reenviando…"
+                  : "Reenviar correo de confirmación"}
+            </button>
+          )}
+
           <button
             type="submit"
-            className="w-full rounded-xl bg-primary text-white font-semibold py-2.5 text-sm hover:bg-primary-dark transition-colors"
+            disabled={submitting}
+            className="w-full rounded-xl bg-primary text-white font-semibold py-2.5 text-sm hover:bg-primary-dark transition-colors disabled:opacity-60"
           >
-            Iniciar sesión
+            {submitting ? "Ingresando…" : "Iniciar sesión"}
           </button>
         </form>
 
