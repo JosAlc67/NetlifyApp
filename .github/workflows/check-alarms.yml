@@ -1,6 +1,6 @@
 name: Revisar alarmas de tareas personales
 
-# Dispara /api/alarms/check en el backend cada ~10 minutos. Esto existe
+# Dispara /api/alarms/check en el backend cada ~10 minutos. Esto existe 
 # porque el plan gratis de Render "duerme" el servicio tras ~15 min sin
 # tráfico; sin este ping periódico, las notificaciones push no llegarían a
 # tiempo (o nunca) cuando nadie tenga la app abierta.
