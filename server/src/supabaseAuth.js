@@ -25,8 +25,10 @@ function anonHeaders(extra = {}) {
 // redirige aquí — así el usuario vuelve a la app sabiendo que ya puede
 // iniciar sesión, en vez de quedarse en una página genérica de Supabase.
 function confirmRedirectUrl() {
-  const origin = (process.env.FRONTEND_ORIGIN || "").split(",")[0].trim();
-  return origin ? `${origin.replace(/\/+$/, "")}/login?confirmed=1` : undefined;
+  let origin = (process.env.FRONTEND_ORIGIN || "").split(",")[0].trim();
+  if (!origin) return undefined;
+  if (!/^https?:\/\//i.test(origin)) origin = `https://${origin}`;
+  return `${origin.replace(/\/+$/, "")}/login?confirmed=1`;
 }
 
 async function request(path, options = {}) {
