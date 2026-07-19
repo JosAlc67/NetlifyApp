@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -15,13 +16,14 @@ import {
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { useAuth } from "@/lib/auth-context";
+import { scheduleAllPending } from "@/lib/notifications-client";
 
 function initials(fullName: string) {
   return fullName.split(" ").slice(0, 2).map((p) => p[0]).join("").toUpperCase();
 }
 
 const NAV_ITEMS = [
-  { href: "/courses", label: "Cursos", icon: GraduationCap },
+  { href: "/tasks", label: "Tareas", icon: GraduationCap },
   { href: "/points", label: "Puntos", icon: Star },
   { href: "/ranking", label: "Ranking", icon: Trophy },
   { href: "/entrepreneurship", label: "Tienda", icon: Store },
@@ -34,6 +36,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
+
+  // Reprograma los avisos de tareas personales cada vez que hay sesión activa,
+  // así funcionan sin importar en qué pantalla esté el usuario (mientras la
+  // pestaña siga abierta).
+  useEffect(() => {
+    if (!user) return;
+    scheduleAllPending(user.id, user.notificationPrefs);
+  }, [user]);
 
   return (
     <div className="min-h-screen flex items-start bg-bg">

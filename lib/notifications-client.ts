@@ -1,0 +1,55 @@
+"use client";
+
+import * as store from "./store";
+import { NotificationPrefs, PersonalTask } from "./types";
+
+// Aviso "mientras la app esté abierta": funciona ya, sin infraestructura nueva.
+// Es el nivel base bajo el sistema de notificaciones push real (que sí avisa
+// con la app cerrada, una vez conectado el backend).
+const timers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function fireNotification(task: PersonalTask, prefs: NotificationPrefs) {
+  if (prefs.vibration && typeof navigator !== "undefined" && "vibrate" in navigator) {
+    navigator.vibrate(200);
+  }
+  if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+    new Notification("Agendify", { body: task.title, tag: task.id });
+  }
+}
+
+export function cancelTaskNotification(taskId: string) {
+  const timer = timers.get(taskId);
+  if (timer) {
+    clearTimeout(timer);
+    timers.delete(taskId);
+  }
+}
+
+// setTimeout no soporta delays más allá de ~24.8 días (int32); una tarea con
+// esa fecha se reprograma la próxima vez que se llame a scheduleAllPending.
+const MAX_DELAY_MS = 2_147_483_647;
+
+export function scheduleTaskNotification(task: PersonalTask, prefs: NotificationPrefs) {
+  cancelTaskNotification(task.id);
+  if (!task.notifyEnabled || task.completed) return;
+  const delay = new Date(task.dueAt).getTime() - Date.now();
+  if (delay <= 0 || delay > MAX_DELAY_MS) return;
+  timers.set(
+    task.id,
+    setTimeout(() => fireNotification(task, prefs), delay)
+  );
+}
+
+export function scheduleAllPending(userId: string, prefs: NotificationPrefs) {
+  for (const task of store.getPersonalTasks(userId)) {
+    scheduleTaskNotification(task, prefs);
+  }
+}
+
+export async function requestNotificationPermission(): Promise<boolean> {
+  if (typeof Notification === "undefined") return false;
+  if (Notification.permission === "granted") return true;
+  if (Notification.permission === "denied") return false;
+  const result = await Notification.requestPermission();
+  return result === "granted";
+}

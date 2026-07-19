@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-Abre http://localhost:3000. Puedes registrar una cuenta nueva; la ventana "Cursos" se llena conectándose a Canvas (ver `server/README.md` para desplegar el backend que protege tu Personal Access Token).
+Abre http://localhost:3000. Puedes registrar una cuenta nueva; en la ventana "Tareas" cada usuario pega su propio Personal Access Token de Canvas para sincronizar (ver `server/README.md` para desplegar el backend).
 
 Para producción:
 
@@ -21,7 +21,7 @@ npm run start
 ## Qué incluye este MVP
 
 - **Autenticación** (registro/login) — `app/login`, `app/register`
-- **Cursos**: lista de cursos activos y sus tareas (pendientes/completadas/todas), sincronizados desde Canvas — `app/(app)/courses`, `lib/canvas-client.ts`, backend en `server/`
+- **Tareas**: pestañas Todas (combinado, por día) / Cursos (navegación por curso) / Personal, sincronizado desde Canvas con el token propio de cada usuario — `app/(app)/tasks`, `lib/canvas-client.ts`, backend en `server/`. Las tareas personales pueden avisar con notificación push real aunque la app esté cerrada (ver `server/README.md` — requiere Supabase + VAPID + el cron en `.github/workflows/check-alarms.yml`).
 - **Progreso**: racha semanal visual + gráfico de puntos por día (Recharts) — `app/(app)/progress`
 - **Ranking**: liga (Bronce/Plata/Oro) y tabla de posiciones — `app/(app)/ranking`
 - **Emprendimiento**: muro de servicios entre estudiantes — `app/(app)/entrepreneurship`

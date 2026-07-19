@@ -24,6 +24,7 @@ import {
   DeliveryType,
   LevelInfo,
   NotebookEntry,
+  PersonalTask,
   DEFAULT_NOTIFICATION_PREFS,
   NotificationPrefs,
   Theme,
@@ -37,6 +38,7 @@ const KEYS = {
   studyLog: "agendify_study_log",
   gigs: "agendify_gigs",
   notebook: "agendify_notebook",
+  personalTasks: "agendify_personal_tasks",
 } as const;
 
 function read<T>(key: string, fallback: T): T {
@@ -738,6 +740,37 @@ export function deleteNotebookEntry(entryId: string) {
   write(KEYS.notebook, all.filter((n) => n.id !== entryId));
 }
 
+// ---------- Tareas personales (Ventana "Tareas" > pestaña Personal) ----------
+
+export function getPersonalTasks(userId: string): PersonalTask[] {
+  return read<PersonalTask[]>(KEYS.personalTasks, [])
+    .filter((t) => t.userId === userId)
+    .sort((a, b) => a.dueAt.localeCompare(b.dueAt));
+}
+
+export function addPersonalTask(
+  task: Omit<PersonalTask, "id" | "completed" | "completedAt">
+): PersonalTask {
+  const all = read<PersonalTask[]>(KEYS.personalTasks, []);
+  const newTask: PersonalTask = { ...task, id: uid(), completed: false };
+  write(KEYS.personalTasks, [...all, newTask]);
+  return newTask;
+}
+
+export function completePersonalTask(taskId: string) {
+  const all = read<PersonalTask[]>(KEYS.personalTasks, []);
+  const updated = all.map((t) =>
+    t.id === taskId ? { ...t, completed: true, completedAt: new Date().toISOString() } : t
+  );
+  write(KEYS.personalTasks, updated);
+  return updated.find((t) => t.id === taskId);
+}
+
+export function deletePersonalTask(taskId: string) {
+  const all = read<PersonalTask[]>(KEYS.personalTasks, []);
+  write(KEYS.personalTasks, all.filter((t) => t.id !== taskId));
+}
+
 // ---------- Notifications / theme / privacy (Ventana 9 - Perfil) ----------
 
 export function updateNotificationPrefs(userId: string, patch: Partial<NotificationPrefs>) {
@@ -754,5 +787,9 @@ export function setTheme(userId: string, theme: Theme) {
 
 export function setAnonymous(userId: string, anonymous: boolean) {
   return updateUser(userId, { anonymous });
+}
+
+export function setCanvasToken(userId: string, canvasToken: string | undefined) {
+  return updateUser(userId, { canvasToken });
 }
 

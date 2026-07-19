@@ -17,6 +17,7 @@ function CourseDetail() {
   const courseId = Number(searchParams.get("id"));
   const { user, refresh } = useAuth();
   const userId = user?.id;
+  const token = user?.canvasToken;
 
   const [course, setCourse] = useState<CanvasCourse | null | undefined>(undefined);
   const [assignments, setAssignments] = useState<CanvasAssignment[]>([]);
@@ -26,11 +27,11 @@ function CourseDetail() {
 
   const load = useCallback(
     async (force = false) => {
-      if (!userId || !courseId) return;
+      if (!userId || !token || !courseId) return;
       setLoading(true);
       setError(null);
       try {
-        const data = await canvasClient.fetchAllCoursesWithAssignments({ force });
+        const data = await canvasClient.fetchAllCoursesWithAssignments(token, { force });
         canvasClient.syncAllCourses(userId, data);
         const entry = data.find((d) => d.course.id === courseId);
         setCourse(entry?.course ?? null);
@@ -42,12 +43,23 @@ function CourseDetail() {
         setLoading(false);
       }
     },
-    [userId, courseId, refresh]
+    [userId, token, courseId, refresh]
   );
 
   useEffect(() => {
     load();
   }, [load]);
+
+  if (!token) {
+    return (
+      <div className="max-w-4xl">
+        <Link href="/tasks" className="inline-flex items-center gap-1.5 text-sm font-semibold text-text-muted hover:text-navy mb-4">
+          <ArrowLeft size={16} /> Tareas
+        </Link>
+        <p className="text-sm text-text-muted">Conecta tu token de Canvas desde la ventana de Tareas primero.</p>
+      </div>
+    );
+  }
 
   if (loading && course === undefined) {
     return (
@@ -60,8 +72,8 @@ function CourseDetail() {
   if (error && course === undefined) {
     return (
       <div className="max-w-4xl">
-        <Link href="/courses" className="inline-flex items-center gap-1.5 text-sm font-semibold text-text-muted hover:text-navy mb-4">
-          <ArrowLeft size={16} /> Cursos
+        <Link href="/tasks" className="inline-flex items-center gap-1.5 text-sm font-semibold text-text-muted hover:text-navy mb-4">
+          <ArrowLeft size={16} /> Tareas
         </Link>
         <div className="rounded-2xl border border-accent-coral/40 bg-accent-coral/10 p-5 flex gap-3">
           <TriangleAlert className="text-accent-coral shrink-0" size={20} />
@@ -74,8 +86,8 @@ function CourseDetail() {
   if (course === null) {
     return (
       <div className="max-w-4xl">
-        <Link href="/courses" className="inline-flex items-center gap-1.5 text-sm font-semibold text-text-muted hover:text-navy mb-4">
-          <ArrowLeft size={16} /> Cursos
+        <Link href="/tasks" className="inline-flex items-center gap-1.5 text-sm font-semibold text-text-muted hover:text-navy mb-4">
+          <ArrowLeft size={16} /> Tareas
         </Link>
         <p className="text-sm text-text-muted">Este curso ya no está disponible.</p>
       </div>
@@ -123,8 +135,8 @@ function CourseDetail() {
 
   return (
     <div className="max-w-4xl">
-      <Link href="/courses" className="inline-flex items-center gap-1.5 text-sm font-semibold text-text-muted hover:text-navy mb-4">
-        <ArrowLeft size={16} /> Cursos
+      <Link href="/tasks" className="inline-flex items-center gap-1.5 text-sm font-semibold text-text-muted hover:text-navy mb-4">
+        <ArrowLeft size={16} /> Tareas
       </Link>
 
       <div className="flex items-start justify-between gap-2 flex-wrap mb-1">

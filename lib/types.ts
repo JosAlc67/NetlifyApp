@@ -24,7 +24,27 @@ export interface Task {
   htmlUrl?: string; // enlace directo a la tarea en Canvas
 }
 
-// ---------- Integración con Canvas (Ventana "Cursos") ----------
+// ---------- Tareas personales (Ventana "Tareas" > pestaña Personal) ----------
+
+export const PERSONAL_TASK_PRESETS = [
+  "Arreglar la casa",
+  "Limpiar",
+  "Lavar la ropa",
+  "Cocinar",
+  "Hacer las compras",
+] as const;
+
+export interface PersonalTask {
+  id: string;
+  userId: string;
+  title: string;
+  dueAt: string; // ISO datetime
+  completed: boolean;
+  completedAt?: string;
+  notifyEnabled: boolean; // pide aviso (in-app ahora; push cuando esté conectado)
+}
+
+// ---------- Integración con Canvas (Ventana "Tareas") ----------
 
 export interface CanvasCourse {
   id: number;
@@ -89,6 +109,9 @@ export interface User {
   anonymous: boolean;
   theme: Theme;
   notificationPrefs: NotificationPrefs;
+  // Ventana "Tareas" — cada usuario trae su propio Personal Access Token de
+  // Canvas; no hay uno compartido en el servidor.
+  canvasToken?: string;
 }
 
 export interface PointsLogEntry {

@@ -43,6 +43,7 @@ function formatDue(dateIso: string) {
 export default function HomePage() {
   const { user, refresh } = useAuth();
   const userId = user?.id;
+  const token = user?.canvasToken;
   const [pending, setPending] = useState(0);
   const [nextTask, setNextTask] = useState<PendingAssignment | null>(null);
   const [canvasError, setCanvasError] = useState(false);
@@ -52,10 +53,11 @@ export default function HomePage() {
   useEffect(() => {
     if (!userId) return;
     setSummary(store.getWeeklySummary(userId));
+    if (!token) return;
 
     let cancelled = false;
     canvasClient
-      .fetchAllCoursesWithAssignments()
+      .fetchAllCoursesWithAssignments(token)
       .then((data) => {
         if (cancelled) return;
         canvasClient.syncAllCourses(userId, data);
@@ -77,7 +79,7 @@ export default function HomePage() {
     return () => {
       cancelled = true;
     };
-  }, [userId, refresh]);
+  }, [userId, token, refresh]);
 
   if (!user) return null;
 
@@ -90,7 +92,7 @@ export default function HomePage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Link
-          href="/courses"
+          href="/tasks"
           className="flex items-center justify-between rounded-2xl bg-primary-soft px-5 py-5 hover:opacity-90 transition-opacity"
         >
           <div>
@@ -105,10 +107,14 @@ export default function HomePage() {
         <div className="rounded-2xl border border-border bg-surface p-5">
           <p className="text-xs text-text-muted mb-1">Próxima entrega</p>
           {nextTask ? (
-            <Link href="/courses" className="block hover:opacity-80 transition-opacity">
+            <Link href="/tasks" className="block hover:opacity-80 transition-opacity">
               <p className="font-display text-lg font-bold text-navy truncate">{nextTask.subject}</p>
               <p className="text-sm text-text-muted truncate">Tarea: {nextTask.title}</p>
               <p className="text-xs font-semibold text-primary mt-1">{formatDue(nextTask.dueDate)}</p>
+            </Link>
+          ) : !token ? (
+            <Link href="/tasks" className="block text-sm text-primary font-semibold mt-2 hover:underline">
+              Conecta tu Canvas para ver tus tareas
             </Link>
           ) : canvasError ? (
             <p className="text-sm text-text-muted mt-2">No se pudo conectar con Canvas.</p>

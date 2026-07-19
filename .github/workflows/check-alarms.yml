@@ -1,0 +1,24 @@
+name: Revisar alarmas de tareas personales
+
+# Dispara /api/alarms/check en el backend cada ~10 minutos. Esto existe
+# porque el plan gratis de Render "duerme" el servicio tras ~15 min sin
+# tráfico; sin este ping periódico, las notificaciones push no llegarían a
+# tiempo (o nunca) cuando nadie tenga la app abierta.
+#
+# Configura estos dos secretos en GitHub: Settings → Secrets and variables →
+# Actions → New repository secret:
+#   BACKEND_URL   -> la URL de tu servicio en Render, ej. https://agendify-canvas.onrender.com
+#   CRON_SECRET   -> el mismo valor que pusiste en CRON_SECRET en Render
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Llamar a /api/alarms/check
+        run: |
+          curl -sS -f "${{ secrets.BACKEND_URL }}/api/alarms/check?secret=${{ secrets.CRON_SECRET }}"
