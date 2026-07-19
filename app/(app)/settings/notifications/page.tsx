@@ -1,17 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Bell, CheckCircle2, Music2, Repeat, Volume2, VolumeX } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Repeat } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import * as store from "@/lib/store";
-import { NotificationPrefs } from "@/lib/types";
-
-const SOUNDS: { value: NotificationPrefs["sound"]; label: string; icon: typeof Bell }[] = [
-  { value: "default", label: "Predeterminado", icon: Volume2 },
-  { value: "campana", label: "Campana", icon: Bell },
-  { value: "suave", label: "Suave", icon: Music2 },
-  { value: "silencioso", label: "Silencioso", icon: VolumeX },
-];
+import { NotificationPrefs, NotificationSound } from "@/lib/types";
+import { SoundPicker } from "@/components/SoundPicker";
 
 const REPEATS: { value: NotificationPrefs["repeat"]; label: string }[] = [
   { value: "none", label: "Sin repetición" },
@@ -56,24 +50,12 @@ export default function SettingsNotificationsPage() {
       <div className={`space-y-6 ${prefs.enabled ? "" : "opacity-40 pointer-events-none"}`}>
         <div>
           <p className="text-xs font-bold tracking-wide text-text-muted mb-3">SONIDO</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {SOUNDS.map(({ value, label, icon: Icon }) => {
-              const active = prefs.sound === value;
-              return (
-                <button
-                  key={value}
-                  onClick={() => update({ sound: value })}
-                  className={`relative rounded-xl border p-4 text-center transition-colors ${
-                    active ? "border-primary bg-primary-soft" : "border-border bg-surface hover:bg-primary-soft/40"
-                  }`}
-                >
-                  {active && <CheckCircle2 size={16} className="absolute top-2 right-2 text-primary" />}
-                  <Icon className="mx-auto mb-2 text-primary" size={22} />
-                  <p className="text-xs font-semibold text-navy">{label}</p>
-                </button>
-              );
-            })}
-          </div>
+          <p className="text-xs text-text-muted mb-3">
+            Suena de verdad mientras tengas Agendify abierto (aunque sea en otra pestaña). Con la
+            app cerrada, las notificaciones usan el sonido del sistema — los navegadores no dejan
+            personalizarlo.
+          </p>
+          <SoundPicker value={prefs.sound} onChange={(sound: NotificationSound) => update({ sound })} />
         </div>
 
         <div>

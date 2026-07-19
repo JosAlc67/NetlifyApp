@@ -12,6 +12,14 @@ function fireNotification(task: PersonalTask, prefs: NotificationPrefs) {
   if (prefs.vibration && typeof navigator !== "undefined" && "vibrate" in navigator) {
     navigator.vibrate(200);
   }
+  // Solo suena mientras la app está abierta (aunque sea en otra pestaña): los
+  // navegadores no exponen forma de personalizar el sonido de una
+  // notificación push cuando la app está cerrada, siempre usan el del
+  // sistema. Además, reproducir audio sin una interacción previa del usuario
+  // puede estar bloqueado por la política de autoplay del navegador.
+  if (prefs.sound.url && typeof Audio !== "undefined") {
+    new Audio(prefs.sound.url).play().catch(() => {});
+  }
   if (typeof Notification !== "undefined" && Notification.permission === "granted") {
     new Notification("Agendify", { body: task.title, tag: task.id });
   }

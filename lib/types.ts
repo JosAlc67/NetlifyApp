@@ -66,16 +66,41 @@ export interface CanvasAssignment {
 
 export type NotificationRepeat = "none" | "5min" | "15min" | "30min";
 
+// ---------- Sonido de notificación ----------
+// Suena de verdad cuando la app está abierta (aunque sea en otra pestaña):
+// se reproduce con <audio> justo cuando se dispara el aviso. Los navegadores
+// no dejan personalizar el sonido de las notificaciones push cuando la app
+// está cerrada (siempre usan el sonido del sistema) — esa parte no depende
+// de nosotros, es una limitación de la Web Notifications API.
+export type NotificationSoundSource = "preset" | "upload" | "spotify";
+
+export interface NotificationSound {
+  source: NotificationSoundSource;
+  id: string; // id del preset, "upload", o el id de la canción en Spotify
+  label: string; // nombre a mostrar
+  url: string | null; // reproducible; null = silencioso
+}
+
+export const SOUND_PRESETS: NotificationSound[] = [
+  { source: "preset", id: "silencioso", label: "Silencioso", url: null },
+  { source: "preset", id: "campana", label: "Campana", url: "/sounds/campana.wav" },
+  { source: "preset", id: "suave", label: "Suave", url: "/sounds/suave.wav" },
+  { source: "preset", id: "alerta", label: "Alerta", url: "/sounds/alerta.wav" },
+  { source: "preset", id: "xilofono", label: "Xilófono", url: "/sounds/xilofono.wav" },
+];
+
+export const DEFAULT_NOTIFICATION_SOUND: NotificationSound = SOUND_PRESETS[1]; // Campana
+
 export interface NotificationPrefs {
   enabled: boolean;
-  sound: "default" | "campana" | "suave" | "silencioso";
+  sound: NotificationSound;
   repeat: NotificationRepeat;
   vibration: boolean;
 }
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   enabled: true,
-  sound: "default",
+  sound: DEFAULT_NOTIFICATION_SOUND,
   repeat: "15min",
   vibration: true,
 };
@@ -87,6 +112,7 @@ export interface FavoriteSong {
   name: string;
   artist: string;
   albumArt: string | null;
+  previewUrl?: string | null; // clip de 30s de Spotify; no todas las canciones lo tienen
 }
 
 export interface User {

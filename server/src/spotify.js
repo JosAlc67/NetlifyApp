@@ -57,6 +57,9 @@ async function searchTracks(query) {
     name: t.name,
     artist: (t.artists ?? []).map((a) => a.name).join(", "),
     albumArt: t.album?.images?.[t.album.images.length - 1]?.url ?? null,
+    // Clip corto (30s) que Spotify permite reproducir sin login ni SDK; no
+    // todas las canciones lo tienen (licencias) — puede venir null.
+    previewUrl: t.preview_url ?? null,
   }));
 }
 

@@ -26,6 +26,7 @@ import {
   NotebookEntry,
   PersonalTask,
   DEFAULT_NOTIFICATION_PREFS,
+  DEFAULT_NOTIFICATION_SOUND,
   NotificationPrefs,
   Theme,
 } from "./types";
@@ -69,6 +70,17 @@ function uid() {
 // autenticada — igual que antes, pero indexado por el id real que asigna
 // Supabase en vez de un id generado localmente.
 
+// Antes `notificationPrefs.sound` era un string ("default"/"campana"/...);
+// ahora es un objeto NotificationSound. Si encuentra el formato viejo (de
+// una cuenta guardada antes de este cambio), lo reemplaza por el sonido por
+// defecto en vez de dejar un string suelto donde se espera un objeto.
+function normalizeNotificationPrefs(raw: unknown): NotificationPrefs {
+  const p = (raw && typeof raw === "object" ? raw : {}) as Partial<NotificationPrefs>;
+  const sound =
+    p.sound && typeof p.sound === "object" && "url" in p.sound ? p.sound : DEFAULT_NOTIFICATION_SOUND;
+  return { ...DEFAULT_NOTIFICATION_PREFS, ...p, sound };
+}
+
 // Backfills fields added after a user was first created, so accounts
 // persisted before those fields existed don't crash on undefined access.
 function normalizeUser(u: User): User {
@@ -77,7 +89,7 @@ function normalizeUser(u: User): User {
     studyMinutes: u.studyMinutes ?? 0,
     anonymous: u.anonymous ?? false,
     theme: u.theme ?? "light",
-    notificationPrefs: { ...DEFAULT_NOTIFICATION_PREFS, ...u.notificationPrefs },
+    notificationPrefs: normalizeNotificationPrefs(u.notificationPrefs),
   };
 }
 
