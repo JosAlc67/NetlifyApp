@@ -5,6 +5,7 @@ import { Award, CheckCircle2, Flame, Share2, Star } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import * as store from "@/lib/store";
 import { Achievement, WeeklySummary } from "@/lib/store";
+import { AdBanner } from "@/components/AdBanner";
 
 function formatWeekRange() {
   const { start, end } = store.getWeekRange();
@@ -152,6 +153,10 @@ export default function WeekPage() {
       >
         <Share2 size={16} /> {shared ? "¡Copiado!" : "Compartir mi logro"}
       </button>
+
+      <div className="mt-4">
+        <AdBanner slot={4} />
+      </div>
     </div>
   );
 }

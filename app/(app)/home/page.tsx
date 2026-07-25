@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import * as store from "@/lib/store";
 import * as canvasClient from "@/lib/canvas-client";
 import { WeeklySummary } from "@/lib/store";
+import { AdBanner } from "@/components/AdBanner";
 
 interface PendingAssignment {
   title: string;
@@ -193,6 +194,10 @@ export default function HomePage() {
           <ChevronRight className="hidden sm:block text-text-muted shrink-0" size={18} />
         </Link>
       )}
+
+      <div className="mt-4">
+        <AdBanner slot={0} />
+      </div>
     </div>
   );
 }

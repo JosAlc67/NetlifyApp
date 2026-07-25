@@ -6,6 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import { BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from "recharts";
 import { useAuth } from "@/lib/auth-context";
 import * as store from "@/lib/store";
+import { AdBanner } from "@/components/AdBanner";
 
 const WEEKDAYS = ["L", "M", "M", "J", "V", "S", "D"];
 
@@ -82,6 +83,10 @@ export default function ProgressPage() {
             <p className="font-display text-2xl font-bold text-navy">{studyHours}</p>
           </div>
         </div>
+      </div>
+
+      <div className="mt-4">
+        <AdBanner slot={3} />
       </div>
     </div>
   );

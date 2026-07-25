@@ -13,10 +13,13 @@ import {
   CalendarDays,
   Settings,
   LogOut,
+  Music2,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { useAuth } from "@/lib/auth-context";
 import { scheduleAllPending } from "@/lib/notifications-client";
+import { SpotifyMiniPlayer } from "./SpotifyMiniPlayer";
+import { useSpotifyPlayback } from "@/lib/spotify-player";
 
 function initials(fullName: string) {
   return fullName.split(" ").slice(0, 2).map((p) => p[0]).join("").toUpperCase();
@@ -29,6 +32,7 @@ const NAV_ITEMS = [
   { href: "/entrepreneurship", label: "Tienda", icon: Store },
   { href: "/agenda", label: "Libreta", icon: BookOpen },
   { href: "/week", label: "Semana", icon: CalendarDays },
+  { href: "/music", label: "Música", icon: Music2 },
   { href: "/settings", label: "Ajustes", icon: Settings },
 ];
 
@@ -36,6 +40,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
+  const { track } = useSpotifyPlayback();
+  const showMiniPlayer = track != null;
 
   // Reprograma los avisos de tareas personales cada vez que hay sesión activa,
   // así funcionan sin importar en qué pantalla esté el usuario (mientras la
@@ -119,28 +125,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
       </header>
 
-      <main className="flex-1 min-w-0 md:ml-64 pt-16 pb-20 md:pt-0 md:pb-0">
+      <main
+        className={`flex-1 min-w-0 md:ml-64 pt-16 md:pt-0 ${
+          showMiniPlayer ? "pb-36 md:pb-16" : "pb-20 md:pb-0"
+        }`}
+      >
         <div className="max-w-[1600px] mx-auto px-4 py-6 md:px-10 md:py-10">{children}</div>
       </main>
 
-      {/* Mobile bottom tab bar */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-surface border-t border-border flex items-stretch overflow-x-auto">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-          const active = pathname.startsWith(href);
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium min-w-[52px] ${
-                active ? "text-primary" : "text-text-muted"
-              }`}
-            >
-              <Icon size={20} />
-              {label}
-            </Link>
-          );
-        })}
-      </nav>
+      {/* Cinta de Spotify (si hay algo cargado) + tab bar móvil, apiladas para no pisarse */}
+      <div className="fixed bottom-0 inset-x-0 md:left-64 z-30 flex flex-col">
+        {showMiniPlayer && <SpotifyMiniPlayer />}
+        <nav className="md:hidden bg-surface border-t border-border flex items-stretch overflow-x-auto">
+          {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+            const active = pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium min-w-[52px] ${
+                  active ? "text-primary" : "text-text-muted"
+                }`}
+              >
+                <Icon size={20} />
+                {label}
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
     </div>
   );
 }

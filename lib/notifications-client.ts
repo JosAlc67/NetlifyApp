@@ -4,7 +4,7 @@ import * as store from "./store";
 import { NotificationPrefs, PersonalTask } from "./types";
 import { getSoundFile } from "./sound-storage";
 import { getSpotifyAccessToken } from "./spotify-auth";
-import { playSpotifyTrack } from "./spotify-player";
+import { isPlaybackActive, playSpotifyTrack } from "./spotify-player";
 
 // Aviso "mientras la app esté abierta": funciona ya, sin infraestructura nueva.
 // Es el nivel base bajo el sistema de notificaciones push real (que sí avisa
@@ -20,6 +20,10 @@ const timers = new Map<string, ReturnType<typeof setTimeout>>();
 async function playNotificationSound(sound: NotificationPrefs["sound"]) {
   try {
     if (sound.source === "spotify-full") {
+      // Si ya está sonando música (desde la ventana Música), no la
+      // interrumpimos con la canción de la alarma — se avisa solo con la
+      // notificación del sistema y la vibración.
+      if (isPlaybackActive()) return;
       await playSpotifyTrack(sound.id, getSpotifyAccessToken);
       return;
     }

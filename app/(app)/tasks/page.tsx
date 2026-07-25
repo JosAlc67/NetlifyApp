@@ -9,6 +9,7 @@ import * as canvasClient from "@/lib/canvas-client";
 import { CourseWithAssignments } from "@/lib/canvas-client";
 import { TaskCard, TaskCardItem } from "@/components/TaskCard";
 import { PersonalTasksTab } from "@/components/PersonalTasksTab";
+import { AdBanner } from "@/components/AdBanner";
 
 type Tab = "todas" | "cursos" | "personal";
 type Filter = "pendientes" | "completadas" | "todas";
@@ -231,6 +232,10 @@ export default function TasksPage() {
                 {f}
               </button>
             ))}
+          </div>
+
+          <div className="mb-5">
+            <AdBanner slot={5} />
           </div>
 
           {loading && !data ? (

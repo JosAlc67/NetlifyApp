@@ -7,6 +7,7 @@ import * as store from "@/lib/store";
 import { fileToResizedDataUrl } from "@/lib/image";
 import { Gig, GigType } from "@/lib/types";
 import { BookOpen, Briefcase, Heart, ImagePlus, Package, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { AdBanner } from "@/components/AdBanner";
 
 const TABS: { key: GigType | "general" | "mias"; label: string }[] = [
   { key: "general", label: "General" },
@@ -168,6 +169,10 @@ export default function EntrepreneurshipPage() {
             {t.label}
           </button>
         ))}
+      </div>
+
+      <div className="mb-4">
+        <AdBanner slot={2} />
       </div>
 
       {visibleGigs.length === 0 ? (

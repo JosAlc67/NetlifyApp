@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import * as store from "@/lib/store";
 import { LeaderboardEntry } from "@/lib/types";
+import { AdBanner } from "@/components/AdBanner";
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
@@ -86,6 +87,10 @@ export default function RankingPage() {
         <p className="text-xs text-text-muted">
           Los 3 primeros de tu liga este mes ganan tarjetas de regalo de Sweet & Coffee, Carl&apos;s Jr. y otras tiendas.
         </p>
+      </div>
+
+      <div className="mt-4">
+        <AdBanner slot={1} />
       </div>
 
       <p className="text-xs text-text-muted text-center mt-4">
