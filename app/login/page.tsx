@@ -4,10 +4,16 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Logo } from "@/components/Logo";
+import { PasswordInput } from "@/components/PasswordInput";
 import { useAuth } from "@/lib/auth-context";
+import * as store from "@/lib/store";
+
+function guestId() {
+  return `guest-${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+}
 
 export default function LoginPage() {
-  const { login, resendConfirmation } = useAuth();
+  const { login, resendConfirmation, refresh } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -51,6 +57,18 @@ export default function LoginPage() {
     }
   }
 
+  // Entra sin cuenta real: todo se guarda solo en este dispositivo
+  // (localStorage), sin tocar Supabase. Pensado para que otras personas
+  // puedan probar la app aunque el registro/login real falle por alguna
+  // razón (correo, backend caído, etc.).
+  function handleGuestLogin() {
+    const id = guestId();
+    store.upsertLocalUser(id, "Usuario de prueba", "invitado@agendify.local");
+    store.setSession(id);
+    refresh();
+    router.push("/home");
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-ink px-4">
       <div className="w-full max-w-sm bg-surface rounded-3xl shadow-2xl p-8">
@@ -84,14 +102,7 @@ export default function LoginPage() {
           </div>
           <div>
             <label className="text-xs font-semibold text-text-muted">Contraseña</label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="mt-1 w-full rounded-xl border border-border px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
-            />
+            <PasswordInput value={password} onChange={setPassword} placeholder="••••••••" required />
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
@@ -126,6 +137,19 @@ export default function LoginPage() {
             Créala aquí
           </Link>
         </p>
+
+        <div className="mt-4 pt-4 border-t border-border text-center">
+          <button
+            type="button"
+            onClick={handleGuestLogin}
+            className="text-xs font-semibold text-text-muted hover:text-primary underline underline-offset-2"
+          >
+            Entrar sin cuenta (modo de prueba)
+          </button>
+          <p className="text-[11px] text-text-muted mt-1">
+            Todo se guarda solo en este dispositivo, sin registro real.
+          </p>
+        </div>
       </div>
     </div>
   );

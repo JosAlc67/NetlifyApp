@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Logo } from "@/components/Logo";
+import { PasswordInput } from "@/components/PasswordInput";
 import { useAuth } from "@/lib/auth-context";
 
 const ESPOL_EMAIL_RE = /^[a-z0-9._%+-]+@espol\.edu\.ec$/i;
@@ -107,15 +108,7 @@ export default function RegisterPage() {
           </div>
           <div>
             <label className="text-xs font-semibold text-text-muted">Contraseña</label>
-            <input
-              type="password"
-              required
-              minLength={6}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Mínimo 6 caracteres"
-              className="mt-1 w-full rounded-xl border border-border px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
-            />
+            <PasswordInput value={password} onChange={setPassword} placeholder="Mínimo 6 caracteres" required minLength={6} />
           </div>
 
           <label className="flex items-start gap-2 text-xs text-text-muted">
