@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, GraduationCap, KeyRound, RefreshCw, TriangleAlert } from "lucide-react";
+import { ChevronRight, ExternalLink, GraduationCap, KeyRound, RefreshCw, TriangleAlert } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import * as store from "@/lib/store";
 import * as canvasClient from "@/lib/canvas-client";
@@ -130,6 +130,14 @@ export default function TasksPage() {
           Pega tu Personal Access Token de Canvas para sincronizar tus cursos y tareas. Cada quien usa
           el suyo — nunca se comparte con nadie más.
         </p>
+        <a
+          href="https://aulavirtual.espol.edu.ec/profile/settings"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline mb-4"
+        >
+          <ExternalLink size={15} /> Ir a generar mi token en Canvas
+        </a>
         <form onSubmit={handleSaveToken} className="space-y-3 text-left">
           <input
             required
