@@ -19,14 +19,10 @@ import {
   PointsLogEntry,
   StudyLogEntry,
   LeaderboardEntry,
-  Gig,
-  GigType,
   DeliveryType,
   LevelInfo,
   NotebookEntry,
   PersonalTask,
-  ForumPost,
-  ForumCategory,
   DEFAULT_NOTIFICATION_PREFS,
   DEFAULT_NOTIFICATION_SOUND,
   NotificationPrefs,
@@ -39,10 +35,8 @@ const KEYS = {
   tasks: "agendify_tasks",
   pointsLog: "agendify_points_log",
   studyLog: "agendify_study_log",
-  gigs: "agendify_gigs",
   notebook: "agendify_notebook",
   personalTasks: "agendify_personal_tasks",
-  forumPosts: "agendify_forum_posts",
 } as const;
 
 function read<T>(key: string, fallback: T): T {
@@ -228,17 +222,6 @@ export function calculateTaskPoints(
   return Math.round(puntosBase * factorDificultad * factorCarga * factorFrecuencia);
 }
 
-function isYesterday(isoDate: string) {
-  const d = new Date(isoDate);
-  const y = new Date();
-  y.setDate(y.getDate() - 1);
-  return d.toDateString() === y.toDateString();
-}
-
-function isToday(isoDate: string) {
-  return new Date(isoDate).toDateString() === new Date().toDateString();
-}
-
 const STUDY_MINUTES_BY_DELIVERY: Record<DeliveryType, number> = {
   quiz: 25,
   tarea: 45,
@@ -247,7 +230,11 @@ const STUDY_MINUTES_BY_DELIVERY: Record<DeliveryType, number> = {
   proyecto_final: 120,
 };
 
-/** Marks a task complete, awards points, and updates the user's streak. */
+// La racha ya NO se calcula aquí incrementándola día a día: se recalcula
+// completa desde el historial real de Canvas (ver
+// canvas-client.ts#computeStreakFromCanvas), porque un día sin tareas
+// pendientes no debe romperla y este contador ingenuo sí lo hacía.
+/** Marks a task complete and awards points/study minutes. */
 export function completeTask(taskId: string) {
   const all = read<Task[]>(KEYS.tasks, []);
   const task = all.find((t) => t.id === taskId);
@@ -261,19 +248,9 @@ export function completeTask(taskId: string) {
 
   const user = getUsers().find((u) => u.id === task.userId);
   if (user) {
-    let streak = user.streak;
-    if (user.lastCompletionDate && isToday(user.lastCompletionDate)) {
-      // already completed something today, streak stays
-    } else if (user.lastCompletionDate && isYesterday(user.lastCompletionDate)) {
-      streak += 1;
-    } else {
-      streak = 1;
-    }
     const minutes = STUDY_MINUTES_BY_DELIVERY[task.deliveryType];
     updateUser(user.id, {
       points: user.points + task.points,
-      streak,
-      lastCompletionDate: now,
       studyMinutes: (user.studyMinutes ?? 0) + minutes,
     });
     logPoints(user.id, task.points, `Tarea completada: ${task.title}`);
@@ -530,61 +507,23 @@ export interface PodiumStatus {
   pointsToPodium: number; // puntos que faltan para alcanzar el 3er lugar (0 si ya está en el podio)
 }
 
-/** Compara al usuario contra el 3er lugar de su grupo (curso) sin exponer nombres. */
-export function getPodiumStatus(user: User): PodiumStatus {
-  const board = getLeaderboard(user, "curso");
-  const myIndex = board.findIndex((e) => e.isCurrentUser);
+// El ranking ahora es real (usuarios registrados, vía stats-client.getLeaderboard()
+// contra el backend/Supabase), así que el podio se calcula contra ESE tablero
+// en vez de peers inventados: el llamador arma `board` con los mismos usuarios
+// que muestra la pantalla de Ranking (opcionalmente filtrados por curso) y se lo
+// pasa aquí ya ordenado por puntos.
+/** Compara al usuario contra el 3er lugar del tablero recibido sin exponer nombres. */
+export function getPodiumStatus(user: User, board: LeaderboardEntry[]): PodiumStatus {
+  const sorted = [...board].sort((a, b) => b.points - a.points);
+  const myIndex = sorted.findIndex((e) => e.id === user.id);
 
   if (myIndex >= 0 && myIndex < 3) {
     return { rank: (myIndex + 1) as 1 | 2 | 3, pointsToPodium: 0 };
   }
 
-  const thirdPlace = board[2];
+  const thirdPlace = sorted[2];
   const pointsToPodium = thirdPlace ? Math.max(thirdPlace.points - user.points + 1, 0) : 0;
   return { rank: null, pointsToPodium };
-}
-
-// ---------- Leaderboard (mock peers + the real current user) ----------
-
-const MOCK_PEERS: (Omit<LeaderboardEntry, "isCurrentUser"> & { curso: string })[] = [
-  { id: "p1", name: "Valeria R.", points: 1250, curso: "Ingeniería en Software · Liga B" },
-  { id: "p2", name: "Ángel S.", points: 1180, curso: "Ingeniería en Software · Liga B" },
-  { id: "p3", name: "Andrés C.", points: 1050, curso: "Ingeniería Civil · Liga A" },
-  { id: "p4", name: "Camila P.", points: 980, curso: "Ingeniería en Software · Liga B" },
-  { id: "p5", name: "Diego M.", points: 850, curso: "Administración · Liga C" },
-  { id: "p6", name: "Sofía L.", points: 760, curso: "Ingeniería Civil · Liga A" },
-  { id: "p7", name: "Kevin B.", points: 720, curso: "Administración · Liga C" },
-  { id: "p8", name: "María F.", points: 680, curso: "Ingeniería en Software · Liga B" },
-];
-
-const MOCK_FRIEND_IDS = new Set(["p1", "p2", "p4"]);
-
-function displayName(user: User) {
-  return user.anonymous ? "Anónimo" : `Tú (${user.fullName.split(" ")[0]})`;
-}
-
-export function getLeaderboard(
-  currentUser: User,
-  scope: "general" | "curso" | "amigos" = "general"
-): LeaderboardEntry[] {
-  const me: LeaderboardEntry = {
-    id: currentUser.id,
-    name: displayName(currentUser),
-    points: currentUser.points,
-    isCurrentUser: true,
-    curso: currentUser.curso,
-  };
-
-  let peers = MOCK_PEERS;
-  if (scope === "curso") {
-    const myCurso = currentUser.curso ?? MOCK_PEERS[0].curso;
-    peers = MOCK_PEERS.filter((p) => p.curso === myCurso);
-  } else if (scope === "amigos") {
-    peers = MOCK_PEERS.filter((p) => MOCK_FRIEND_IDS.has(p.id));
-  }
-
-  const entries: LeaderboardEntry[] = [...peers, me];
-  return entries.sort((a, b) => b.points - a.points);
 }
 
 export function getLeague(points: number) {
@@ -593,120 +532,9 @@ export function getLeague(points: number) {
   return { name: "Liga Bronce", range: "0–199 pts" };
 }
 
-// ---------- Entrepreneurship board / Tienda (mock content) ----------
-
-const DEFAULT_GIGS: Gig[] = [
-  {
-    id: "g1",
-    authorId: "seed",
-    authorName: "Ana P.",
-    title: "Tutorías de Matemáticas",
-    description: "Cálculo, álgebra y estadística. Clases online o presenciales.",
-    price: "$8 / hora",
-    type: "servicio",
-    images: [],
-    contact: "ana.perez@espol.edu.ec",
-  },
-  {
-    id: "g2",
-    authorId: "seed",
-    authorName: "Josué R.",
-    title: "Apuntes completos de Física I",
-    description: "Temas: mecánica y ondas, con ejercicios resueltos.",
-    price: "$3",
-    type: "apunte",
-    images: [],
-    contact: "josue.rivera@espol.edu.ec",
-  },
-  {
-    id: "g3",
-    authorId: "seed",
-    authorName: "María G.",
-    title: "Diseño de presentaciones académicas",
-    description: "Entrega rápida y profesional para tus proyectos de clase.",
-    price: "$5",
-    type: "servicio",
-    images: [],
-    contact: "maria.gomez@espol.edu.ec",
-  },
-  {
-    id: "g4",
-    authorId: "seed",
-    authorName: "Ángel G.",
-    title: "Calculadora científica (como nueva)",
-    description: "Casio fx-991, se vende por cambio de carrera.",
-    price: "$12",
-    type: "producto",
-    images: [],
-    contact: "angel.gonzalez@espol.edu.ec",
-  },
-];
-
-const VALID_GIG_TYPES: GigType[] = ["apunte", "servicio", "producto"];
-
-// Maps the category values used before Gig switched from `category` to `type`.
-const LEGACY_CATEGORY_TO_TYPE: Record<string, GigType> = {
-  "Tutorías": "servicio",
-  "Apuntes": "apunte",
-  "Diseño": "servicio",
-  "Servicios": "servicio",
-};
-
-// Backfills/repairs fields added or renamed after a gig was first created,
-// so old localStorage data (a different `type`, a legacy `category`, or
-// missing images/contact) never crashes rendering.
-function normalizeGig(g: Gig & { category?: string }): Gig {
-  const type = VALID_GIG_TYPES.includes(g.type)
-    ? g.type
-    : LEGACY_CATEGORY_TO_TYPE[g.category ?? ""] ?? "servicio";
-  return {
-    ...g,
-    type,
-    images: Array.isArray(g.images) ? g.images : [],
-    contact: g.contact ?? "",
-  };
-}
-
-export function getGigs(): Gig[] {
-  const existing = read<Gig[]>(KEYS.gigs, []);
-  if (existing.length === 0) {
-    write(KEYS.gigs, DEFAULT_GIGS);
-    return DEFAULT_GIGS;
-  }
-  return existing.map(normalizeGig);
-}
-
-export function getGig(gigId: string): Gig | undefined {
-  return getGigs().find((g) => g.id === gigId);
-}
-
-export function getGigsByType(type: GigType | "general"): Gig[] {
-  const gigs = getGigs();
-  return type === "general" ? gigs : gigs.filter((g) => g.type === type);
-}
-
-export function getMyGigs(userId: string): Gig[] {
-  return getGigs().filter((g) => g.authorId === userId);
-}
-
-export function addGig(gig: Omit<Gig, "id">) {
-  const gigs = getGigs();
-  const newGig: Gig = { ...gig, id: uid() };
-  write(KEYS.gigs, [...gigs, newGig]);
-  return newGig;
-}
-
-export function deleteGig(gigId: string) {
-  const gigs = getGigs();
-  write(KEYS.gigs, gigs.filter((g) => g.id !== gigId));
-}
-
-export function updateGig(gigId: string, patch: Partial<Omit<Gig, "id" | "authorId">>) {
-  const gigs = getGigs();
-  const updated = gigs.map((g) => (g.id === gigId ? { ...g, ...patch } : g));
-  write(KEYS.gigs, updated);
-  return updated.find((g) => g.id === gigId);
-}
+// La Tienda/Emprendimiento ahora vive en el backend (Supabase, tabla `gigs`)
+// para que todos los usuarios vean las mismas publicaciones — ver
+// lib/gigs-client.ts. Ya no hay datos mock ni CRUD local aquí.
 
 // ---------- Libreta digital (Ventana 6) ----------
 
@@ -795,64 +623,7 @@ export function setCanvasToken(userId: string, canvasToken: string | undefined) 
   return updateUser(userId, { canvasToken });
 }
 
-// ---------- Foro (pedir/dar ayuda por materia, curso o tema general) ----------
-
-export function getForumPosts(): ForumPost[] {
-  return read<ForumPost[]>(KEYS.forumPosts, [])
-    .map((p) => ({ ...p, replies: p.replies ?? [] }))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-}
-
-export function getForumPost(id: string): ForumPost | undefined {
-  return getForumPosts().find((p) => p.id === id);
-}
-
-export function getMyForumPosts(userId: string): ForumPost[] {
-  return getForumPosts().filter((p) => p.authorId === userId);
-}
-
-export function addForumPost(post: {
-  authorId: string;
-  authorName: string;
-  title: string;
-  body: string;
-  category: ForumCategory;
-  topic: string;
-}): ForumPost {
-  const all = read<ForumPost[]>(KEYS.forumPosts, []);
-  const newPost: ForumPost = {
-    ...post,
-    id: uid(),
-    resolved: false,
-    createdAt: new Date().toISOString(),
-    replies: [],
-  };
-  write(KEYS.forumPosts, [...all, newPost]);
-  return newPost;
-}
-
-export function deleteForumPost(id: string) {
-  const all = read<ForumPost[]>(KEYS.forumPosts, []);
-  write(KEYS.forumPosts, all.filter((p) => p.id !== id));
-}
-
-export function toggleForumResolved(id: string) {
-  const all = read<ForumPost[]>(KEYS.forumPosts, []);
-  const updated = all.map((p) => (p.id === id ? { ...p, resolved: !p.resolved } : p));
-  write(KEYS.forumPosts, updated);
-  return updated.find((p) => p.id === id);
-}
-
-export function addForumReply(
-  postId: string,
-  reply: { authorId: string; authorName: string; body: string }
-) {
-  const all = read<ForumPost[]>(KEYS.forumPosts, []);
-  const newReply = { ...reply, id: uid(), createdAt: new Date().toISOString() };
-  const updated = all.map((p) =>
-    p.id === postId ? { ...p, replies: [...(p.replies ?? []), newReply] } : p
-  );
-  write(KEYS.forumPosts, updated);
-  return updated.find((p) => p.id === postId);
-}
+// El Foro ahora vive en el backend (Supabase, tablas `forum_posts` /
+// `forum_replies`) para que todos los usuarios vean las mismas publicaciones
+// — ver lib/forum-client.ts. Ya no hay CRUD local aquí.
 

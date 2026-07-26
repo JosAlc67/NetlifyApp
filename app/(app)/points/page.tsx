@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Medal } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import * as store from "@/lib/store";
+import * as statsClient from "@/lib/stats-client";
 import { PodiumReward, PodiumStatus } from "@/lib/store";
 
 const WEEKDAYS = ["L", "M", "M", "J", "V", "S", "D"];
@@ -21,7 +22,16 @@ export default function PointsPage() {
 
   useEffect(() => {
     if (!user) return;
-    setStatus(store.getPodiumStatus(user));
+    statsClient
+      .getLeaderboard()
+      .then((rows) => {
+        const board = user.curso ? rows.filter((r) => r.curso === user.curso) : rows;
+        const withMe = board.some((r) => r.id === user.id)
+          ? board
+          : [...board, { id: user.id, name: user.fullName, points: user.points, streak: user.streak, curso: user.curso ?? null }];
+        setStatus(store.getPodiumStatus(user, withMe));
+      })
+      .catch(() => setStatus(store.getPodiumStatus(user, [])));
     setRewards(store.PODIUM_REWARDS);
   }, [user]);
 

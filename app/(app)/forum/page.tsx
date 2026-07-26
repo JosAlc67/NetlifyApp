@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
-import * as store from "@/lib/store";
+import * as forumClient from "@/lib/forum-client";
 import { ForumCategory, ForumPost, FORUM_CATEGORY_LABEL } from "@/lib/types";
 import {
   BookOpen,
@@ -48,21 +48,36 @@ export default function ForumPage() {
   const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("todas");
   const [query, setQuery] = useState("");
   const [posts, setPosts] = useState<ForumPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [category, setCategory] = useState<ForumCategory>("materia");
   const [topic, setTopic] = useState("");
 
-  function load() {
-    if (!user) return;
-    setPosts(tab === "mias" ? store.getMyForumPosts(user.id) : store.getForumPosts());
-  }
+  // El foro es compartido: todos los usuarios ven las mismas publicaciones
+  // (backend/Supabase), así que se piden todas siempre y "Mis publicaciones"
+  // solo filtra en el cliente.
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setPosts(await forumClient.getForumPosts());
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo cargar el foro.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  useEffect(load, [tab, user]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const visiblePosts = posts
-    .filter((p) => (tab === "todas" || tab === "mias" ? true : p.category === tab))
+    .filter((p) => (tab === "mias" ? p.authorId === user?.id : tab === "todas" ? true : p.category === tab))
     .filter((p) =>
       (p.title + " " + p.body + " " + p.topic).toLowerCase().includes(query.toLowerCase())
     );
@@ -75,24 +90,34 @@ export default function ForumPage() {
     setShowForm(true);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!user) return;
-    store.addForumPost({
-      authorId: user.id,
-      authorName: user.anonymous ? "Anónimo" : user.fullName,
-      title,
-      body,
-      category,
-      topic: category === "general" ? "" : topic,
-    });
-    setShowForm(false);
-    load();
+    setSubmitting(true);
+    try {
+      await forumClient.addForumPost({
+        authorName: user.anonymous ? "Anónimo" : user.fullName,
+        title,
+        body,
+        category,
+        topic: category === "general" ? "" : topic,
+      });
+      setShowForm(false);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo publicar.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  function handleDelete(id: string) {
-    store.deleteForumPost(id);
-    load();
+  async function handleDelete(id: string) {
+    try {
+      await forumClient.deleteForumPost(id);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo eliminar.");
+    }
   }
 
   return (
@@ -138,7 +163,15 @@ export default function ForumPage() {
         <AdBanner slot={6} />
       </div>
 
-      {visiblePosts.length === 0 ? (
+      {error && (
+        <div className="rounded-xl bg-red-50 text-red-700 text-sm px-4 py-3 mb-4">{error}</div>
+      )}
+
+      {loading ? (
+        <div className="rounded-2xl border border-dashed border-border p-10 text-center text-text-muted text-sm">
+          Cargando publicaciones...
+        </div>
+      ) : visiblePosts.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border p-10 text-center text-text-muted text-sm">
           {tab === "mias"
             ? "Aún no has preguntado nada. Usa \"Preguntar\" para crear tu primera publicación."
@@ -236,9 +269,10 @@ export default function ForumPage() {
               />
               <button
                 type="submit"
-                className="w-full rounded-xl bg-primary text-white font-semibold py-2.5 text-sm hover:bg-primary-dark transition-colors"
+                disabled={submitting}
+                className="w-full rounded-xl bg-primary text-white font-semibold py-2.5 text-sm hover:bg-primary-dark transition-colors disabled:opacity-60"
               >
-                Publicar
+                {submitting ? "Publicando..." : "Publicar"}
               </button>
             </form>
           </div>

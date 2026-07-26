@@ -6,6 +6,7 @@ import { CheckCircle2, ChevronRight, Flame, Star } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import * as store from "@/lib/store";
 import * as canvasClient from "@/lib/canvas-client";
+import * as statsClient from "@/lib/stats-client";
 import { WeeklySummary } from "@/lib/store";
 import { AdBanner } from "@/components/AdBanner";
 
@@ -73,6 +74,8 @@ export default function HomePage() {
         setNextTask(pendingList[0] ?? null);
         setSummary(store.getWeeklySummary(userId));
         refresh();
+        const freshUser = store.getUsers().find((u) => u.id === userId);
+        if (freshUser) statsClient.pushStats(freshUser);
       })
       .catch(() => {
         if (!cancelled) setCanvasError(true);

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Camera, Music, Search, X } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import * as store from "@/lib/store";
+import * as statsClient from "@/lib/stats-client";
 import { fileToResizedDataUrl } from "@/lib/image";
 import { searchSpotifyTracks } from "@/lib/spotify-client";
 import { FavoriteSong } from "@/lib/types";
@@ -96,6 +97,8 @@ export default function SettingsDataPage() {
     e.preventDefault();
     store.updateUser(user!.id, { phone, bio, favoriteSong, curso, photoUrl });
     refresh();
+    const freshUser = store.getUsers().find((u) => u.id === user!.id);
+    if (freshUser) statsClient.pushStats(freshUser);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }

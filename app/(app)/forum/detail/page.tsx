@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, BookOpen, CheckCircle2, GraduationCap, MessagesSquare, Send, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import * as store from "@/lib/store";
+import * as forumClient from "@/lib/forum-client";
 import { ForumCategory, ForumPost, FORUM_CATEGORY_LABEL } from "@/lib/types";
 
 const CATEGORY_ICON: Record<ForumCategory, typeof BookOpen> = {
@@ -30,12 +30,23 @@ function ForumPostDetail() {
   const id = searchParams.get("id") ?? "";
   const [post, setPost] = useState<ForumPost | null | undefined>(undefined);
   const [reply, setReply] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
 
-  function load() {
-    setPost(store.getForumPost(id) ?? null);
+  async function load() {
+    try {
+      const posts = await forumClient.getForumPosts();
+      setPost(posts.find((p) => p.id === id) ?? null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo cargar la publicación.");
+      setPost(null);
+    }
   }
 
-  useEffect(load, [id]);
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   if (post === undefined) return null;
 
@@ -45,7 +56,7 @@ function ForumPostDetail() {
         <Link href="/forum" className="inline-flex items-center gap-1.5 text-sm font-semibold text-text-muted hover:text-navy mb-4">
           <ArrowLeft size={16} /> Foro
         </Link>
-        <p className="text-sm text-text-muted">Esta publicación ya no está disponible.</p>
+        <p className="text-sm text-text-muted">{error ?? "Esta publicación ya no está disponible."}</p>
       </div>
     );
   }
@@ -53,26 +64,40 @@ function ForumPostDetail() {
   const Icon = CATEGORY_ICON[post.category];
   const isAuthor = user?.id === post.authorId;
 
-  function handleReply(e: React.FormEvent) {
+  async function handleReply(e: React.FormEvent) {
     e.preventDefault();
     if (!user || !reply.trim()) return;
-    store.addForumReply(post!.id, {
-      authorId: user.id,
-      authorName: user.anonymous ? "Anónimo" : user.fullName,
-      body: reply.trim(),
-    });
-    setReply("");
-    load();
+    setSending(true);
+    try {
+      await forumClient.addForumReply(post!.id, {
+        authorName: user.anonymous ? "Anónimo" : user.fullName,
+        body: reply.trim(),
+      });
+      setReply("");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo enviar la respuesta.");
+    } finally {
+      setSending(false);
+    }
   }
 
-  function handleToggleResolved() {
-    store.toggleForumResolved(post!.id);
-    load();
+  async function handleToggleResolved() {
+    try {
+      await forumClient.toggleForumResolved(post!.id, !post!.resolved);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo actualizar la publicación.");
+    }
   }
 
-  function handleDelete() {
-    store.deleteForumPost(post!.id);
-    router.push("/forum");
+  async function handleDelete() {
+    try {
+      await forumClient.deleteForumPost(post!.id);
+      router.push("/forum");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo eliminar la publicación.");
+    }
   }
 
   return (
@@ -138,6 +163,10 @@ function ForumPostDetail() {
         ))}
       </div>
 
+      {error && (
+        <div className="rounded-xl bg-red-50 text-red-700 text-sm px-4 py-3 mb-3">{error}</div>
+      )}
+
       <form onSubmit={handleReply} className="flex items-start gap-2">
         <textarea
           value={reply}
@@ -148,7 +177,7 @@ function ForumPostDetail() {
         />
         <button
           type="submit"
-          disabled={!reply.trim()}
+          disabled={!reply.trim() || sending}
           className="shrink-0 rounded-xl bg-primary text-white p-3 hover:bg-primary-dark transition-colors disabled:opacity-40"
           aria-label="Enviar respuesta"
         >

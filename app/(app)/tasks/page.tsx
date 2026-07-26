@@ -6,6 +6,7 @@ import { ChevronRight, ExternalLink, GraduationCap, KeyRound, RefreshCw, Triangl
 import { useAuth } from "@/lib/auth-context";
 import * as store from "@/lib/store";
 import * as canvasClient from "@/lib/canvas-client";
+import * as statsClient from "@/lib/stats-client";
 import { CourseWithAssignments } from "@/lib/canvas-client";
 import { TaskCard, TaskCardItem } from "@/components/TaskCard";
 import { PersonalTasksTab } from "@/components/PersonalTasksTab";
@@ -88,6 +89,8 @@ export default function TasksPage() {
         canvasClient.syncAllCourses(userId, result);
         setData(result);
         refresh();
+        const freshUser = store.getUsers().find((u) => u.id === userId);
+        if (freshUser) statsClient.pushStats(freshUser);
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo conectar con Canvas.");
       } finally {

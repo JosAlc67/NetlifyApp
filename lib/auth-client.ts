@@ -67,19 +67,37 @@ export async function resendConfirmation(email: string): Promise<void> {
 }
 
 /** Si el access token guardado ya venció (o está por vencer), lo renueva con el refresh token. */
-export async function restoreSession(): Promise<void> {
+async function ensureFreshTokens(): Promise<StoredSession | null> {
   const tokens = readTokens();
-  if (!tokens) return;
-  if (Date.now() < tokens.expiresAt - 60_000) return;
+  if (!tokens) return null;
+  if (Date.now() < tokens.expiresAt - 60_000) return tokens;
   try {
     const fresh = await apiFetch<StoredSession>("/api/auth/refresh", {
       method: "POST",
       body: { refreshToken: tokens.refreshToken },
     });
     writeTokens(fresh);
+    return fresh;
   } catch {
     clearTokens();
+    return null;
   }
+}
+
+export async function restoreSession(): Promise<void> {
+  await ensureFreshTokens();
+}
+
+/**
+ * Access token válido para llamar rutas del backend que exigen sesión real de
+ * Supabase (foro, tienda, sincronizar estadísticas del ranking). Devuelve
+ * null si no hay sesión real (p.ej. usuario en "modo de prueba"/guest, que no
+ * tiene cuenta en Supabase) — los llamadores deben tratarlo como "no
+ * disponible", no como error.
+ */
+export async function getAccessToken(): Promise<string | null> {
+  const tokens = await ensureFreshTokens();
+  return tokens?.accessToken ?? null;
 }
 
 export function logout(): void {

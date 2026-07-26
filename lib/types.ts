@@ -51,6 +51,7 @@ export interface CanvasCourse {
   name: string;
   courseCode: string | null;
   term: string | null;
+  termStartAt: string | null; // ISO; se usa como "inicio del semestre" para calcular la racha real
   credits: 1 | 2 | 3;
 }
 
@@ -166,8 +167,9 @@ export interface LeaderboardEntry {
   id: string;
   name: string;
   points: number;
+  streak: number;
   isCurrentUser?: boolean;
-  curso?: string;
+  curso?: string | null;
 }
 
 export type GigType = "apunte" | "servicio" | "producto";

@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
-import * as store from "@/lib/store";
+import * as gigsClient from "@/lib/gigs-client";
 import { fileToResizedDataUrl } from "@/lib/image";
 import { Gig, GigType } from "@/lib/types";
 import { BookOpen, Briefcase, Heart, ImagePlus, Package, Pencil, Plus, Search, Trash2, X } from "lucide-react";
@@ -45,7 +45,10 @@ export default function EntrepreneurshipPage() {
   const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("general");
   const [query, setQuery] = useState("");
   const [gigs, setGigs] = useState<Gig[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -55,16 +58,28 @@ export default function EntrepreneurshipPage() {
   const [images, setImages] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
 
-  function load() {
-    if (!user) return;
-    setGigs(tab === "mias" ? store.getMyGigs(user.id) : store.getGigsByType(tab));
-  }
+  // La tienda es compartida: todos ven las mismas publicaciones
+  // (backend/Supabase), así que siempre se piden todas y las pestañas
+  // (categoría, "Mis publicaciones") solo filtran en el cliente.
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setGigs(await gigsClient.getGigs());
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo cargar la tienda.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  useEffect(load, [tab, user]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  const visibleGigs = gigs.filter((g) =>
-    (g.title + g.description).toLowerCase().includes(query.toLowerCase())
-  );
+  const visibleGigs = gigs
+    .filter((g) => (tab === "mias" ? g.authorId === user?.id : tab === "general" ? true : g.type === tab))
+    .filter((g) => (g.title + g.description).toLowerCase().includes(query.toLowerCase()));
 
   function openNewForm() {
     setEditingId(null);
@@ -102,34 +117,44 @@ export default function EntrepreneurshipPage() {
     setImages((prev) => prev.filter((_, i) => i !== idx));
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!user) return;
-    if (editingId) {
-      store.updateGig(editingId, { title, description, price, type, contact, images });
-    } else {
-      store.addGig({
-        authorId: user.id,
-        authorName: user.anonymous
-          ? "Anónimo"
-          : user.fullName.split(" ")[0] + " " + (user.fullName.split(" ")[1]?.[0] ?? "") + ".",
-        title,
-        description,
-        price,
-        type,
-        contact,
-        images,
-      });
+    setSubmitting(true);
+    try {
+      if (editingId) {
+        await gigsClient.updateGig(editingId, { title, description, price, type, contact, images });
+      } else {
+        await gigsClient.addGig({
+          authorName: user.anonymous
+            ? "Anónimo"
+            : user.fullName.split(" ")[0] + " " + (user.fullName.split(" ")[1]?.[0] ?? "") + ".",
+          title,
+          description,
+          price,
+          type,
+          contact,
+          images,
+        });
+      }
+      setTitle(""); setDescription(""); setPrice(""); setContact(""); setImages([]);
+      setEditingId(null);
+      setShowForm(false);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo publicar.");
+    } finally {
+      setSubmitting(false);
     }
-    setTitle(""); setDescription(""); setPrice(""); setContact(""); setImages([]);
-    setEditingId(null);
-    setShowForm(false);
-    load();
   }
 
-  function handleDelete(id: string) {
-    store.deleteGig(id);
-    load();
+  async function handleDelete(id: string) {
+    try {
+      await gigsClient.deleteGig(id);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo eliminar.");
+    }
   }
 
   return (
@@ -175,7 +200,15 @@ export default function EntrepreneurshipPage() {
         <AdBanner slot={2} />
       </div>
 
-      {visibleGigs.length === 0 ? (
+      {error && (
+        <div className="rounded-xl bg-red-50 text-red-700 text-sm px-4 py-3 mb-4">{error}</div>
+      )}
+
+      {loading ? (
+        <div className="rounded-2xl border border-dashed border-border p-10 text-center text-text-muted text-sm">
+          Cargando publicaciones...
+        </div>
+      ) : visibleGigs.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border p-10 text-center text-text-muted text-sm">
           {tab === "mias"
             ? "Aún no tienes publicaciones. Usa \"Publicar\" para crear la primera."
@@ -279,8 +312,12 @@ export default function EntrepreneurshipPage() {
                 className="w-full rounded-xl border border-border px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary" />
               <input required placeholder="Contacto (correo o WhatsApp)" value={contact} onChange={(e) => setContact(e.target.value)}
                 className="w-full rounded-xl border border-border px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary" />
-              <button type="submit" className="w-full rounded-xl bg-primary text-white font-semibold py-2.5 text-sm hover:bg-primary-dark transition-colors">
-                {editingId ? "Guardar cambios" : "Publicar"}
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full rounded-xl bg-primary text-white font-semibold py-2.5 text-sm hover:bg-primary-dark transition-colors disabled:opacity-60"
+              >
+                {submitting ? "Guardando..." : editingId ? "Guardar cambios" : "Publicar"}
               </button>
             </form>
           </div>

@@ -89,4 +89,12 @@ function signOut(accessToken) {
   });
 }
 
-module.exports = { signUp, signInWithPassword, refreshSession, resend, signOut };
+/** Valida un access token y devuelve el usuario de Supabase Auth al que pertenece. */
+function getUser(accessToken) {
+  return request("/user", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+module.exports = { signUp, signInWithPassword, refreshSession, resend, signOut, getUser };

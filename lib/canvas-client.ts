@@ -107,7 +107,98 @@ export function syncCourseAssignments(
   return newlyCompleted;
 }
 
-/** Sincroniza varios cursos a la vez (ver syncCourseAssignments). */
+/** Sincroniza varios cursos a la vez (ver syncCourseAssignments) y recalcula la racha real. */
 export function syncAllCourses(userId: string, data: CourseWithAssignments[]): Task[] {
-  return data.flatMap(({ course, assignments }) => syncCourseAssignments(userId, course, assignments));
+  const completed = data.flatMap(({ course, assignments }) => syncCourseAssignments(userId, course, assignments));
+  store.updateUser(userId, { streak: computeStreakFromCanvas(data) });
+  return completed;
+}
+
+function dayKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function startOfDay(d: Date): Date {
+  const r = new Date(d);
+  r.setHours(0, 0, 0, 0);
+  return r;
+}
+
+function addDays(d: Date, n: number): Date {
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
+}
+
+/**
+ * Calcula la racha real a partir del historial de Canvas, en vez de ir
+ * sumando 1 por día al completar tareas (lo que rompía la racha en días sin
+ * ninguna tarea pendiente). Reglas, tal como las pidió el usuario:
+ *  - Un día sin ninguna tarea con fecha de entrega ese día NO rompe la racha
+ *    (se salta, ni suma ni resta).
+ *  - Un día con ≥1 tarea vencida donde no se entregó ninguna SÍ rompe la
+ *    racha (ahí termina el conteo hacia atrás).
+ *  - Basta con entregar UNA tarea ese día (de cualquier curso) para que ese
+ *    día cuente.
+ *  - "Hoy" nunca rompe la racha por sí solo aunque tenga tareas pendientes
+ *    sin entregar todavía, porque el día no ha terminado; simplemente se
+ *    ignora y se sigue evaluando desde ayer hacia atrás.
+ * Se recorre hacia atrás desde hoy hasta el inicio real del semestre
+ * (`course.termStartAt`, que Canvas expone vía el objeto `term`); si ningún
+ * curso trae esa fecha, se usa como límite la tarea vencida más antigua que
+ * se encuentre.
+ */
+export function computeStreakFromCanvas(data: CourseWithAssignments[]): number {
+  const now = new Date();
+  const todayKey = dayKey(now);
+
+  const daysHasTask = new Set<string>();
+  const daysAnySubmitted = new Map<string, boolean>();
+  let earliestTermStart: Date | null = null;
+
+  for (const { course, assignments } of data) {
+    if (course.termStartAt) {
+      const start = new Date(course.termStartAt);
+      if (!Number.isNaN(start.getTime()) && (!earliestTermStart || start < earliestTermStart)) {
+        earliestTermStart = start;
+      }
+    }
+    for (const a of assignments) {
+      if (!a.dueAt) continue;
+      const due = new Date(a.dueAt);
+      if (Number.isNaN(due.getTime()) || due.getTime() > now.getTime()) continue; // aún no vence
+      const key = dayKey(due);
+      daysHasTask.add(key);
+      if (a.submitted) daysAnySubmitted.set(key, true);
+      else if (!daysAnySubmitted.has(key)) daysAnySubmitted.set(key, false);
+    }
+  }
+
+  if (daysHasTask.size === 0) return 0;
+
+  let bound = earliestTermStart;
+  if (!bound) {
+    for (const key of daysHasTask) {
+      const d = new Date(key);
+      if (!bound || d < bound) bound = d;
+    }
+  }
+  const boundStart = startOfDay(bound!);
+
+  let streak = 0;
+  let cursor = startOfDay(now);
+  const MAX_DAYS = 3650; // resguardo por si la fecha de inicio de semestre viene mal
+  for (let i = 0; i < MAX_DAYS && cursor.getTime() >= boundStart.getTime(); i++) {
+    const key = dayKey(cursor);
+    if (daysHasTask.has(key)) {
+      if (daysAnySubmitted.get(key)) {
+        streak += 1;
+      } else if (key !== todayKey) {
+        break; // día con tareas vencidas y ninguna entregada: ahí se corta la racha
+      }
+      // si es hoy y aún no se entrega nada, no rompe (el día no ha terminado)
+    }
+    cursor = addDays(cursor, -1);
+  }
+  return streak;
 }

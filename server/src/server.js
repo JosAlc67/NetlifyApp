@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const express = require("express");
 const cors = require("cors");
 const { getActiveCourses, getCourseAssignments } = require("./canvas");
@@ -123,6 +124,26 @@ function toSession(supabaseSession) {
   };
 }
 
+// Protege las rutas que escriben datos compartidos (foro, tienda, stats del
+// ranking): valida el access token de Supabase contra Supabase Auth y cuelga
+// el usuario real en req.supabaseUser, así el autor de cada publicación es
+// siempre quien de verdad inició sesión (no un id que mande el cliente).
+// Los usuarios "modo de prueba" (guest, sin cuenta real) no tienen token
+// válido y por lo tanto no pueden publicar en foro/tienda ni aparecer en el
+// ranking — solo pueden leerlos.
+async function requireSupabaseUser(req, res, next) {
+  const auth = req.header("authorization") || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+  if (!token) return res.status(401).json({ error: "Falta el token de sesión." });
+  try {
+    const user = await supabaseAuth.getUser(token);
+    req.supabaseUser = { id: user.id, email: user.email };
+    next();
+  } catch (err) {
+    res.status(401).json({ error: "Sesión inválida o expirada, inicia sesión de nuevo." });
+  }
+}
+
 app.post("/api/auth/register", async (req, res) => {
   const { fullName, email, password } = req.body || {};
   if (!fullName || !email || !password) {
@@ -230,6 +251,223 @@ app.post("/api/auth/logout", async (req, res) => {
   res.status(204).end();
 });
 
+// ---------- Ranking (real, según usuarios registrados) ----------
+// Puntos/racha/curso viven en localStorage por dispositivo (los cursos y
+// tareas de Canvas también); cada dispositivo los empuja a `profiles` vía
+// PATCH /api/profile/stats para que el ranking pueda compararlos entre
+// usuarios reales. Lectura pública: cualquiera con sesión puede ver el
+// ranking, pero solo el dueño de un perfil puede actualizar sus propios
+// puntos/racha (ver requireSupabaseUser).
+app.get("/api/leaderboard", async (_req, res) => {
+  try {
+    const rows = await db.getLeaderboard();
+    res.json(
+      rows.map((r) => ({
+        id: r.id,
+        name: r.anonymous ? "Usuario anónimo" : r.full_name || "Usuario",
+        points: r.points ?? 0,
+        streak: r.streak ?? 0,
+        curso: r.curso ?? null,
+      }))
+    );
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.patch("/api/profile/stats", requireSupabaseUser, async (req, res) => {
+  const { points, streak, studyMinutes, curso, anonymous, fullName } = req.body || {};
+  try {
+    await db.updateProfileStats(req.supabaseUser.id, { points, streak, studyMinutes, curso, anonymous, fullName });
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// ---------- Foro (compartido entre todos los usuarios) ----------
+
+function toForumPost(p) {
+  return {
+    id: p.id,
+    authorId: p.author_id,
+    authorName: p.author_name,
+    title: p.title,
+    body: p.body,
+    category: p.category,
+    topic: p.topic,
+    resolved: p.resolved,
+    createdAt: p.created_at,
+    replies: (p.forum_replies || []).map(toForumReply),
+  };
+}
+
+function toForumReply(r) {
+  return { id: r.id, authorId: r.author_id, authorName: r.author_name, body: r.body, createdAt: r.created_at };
+}
+
+app.get("/api/forum/posts", async (_req, res) => {
+  try {
+    const rows = await db.getForumPosts();
+    res.json(rows.map(toForumPost));
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.post("/api/forum/posts", requireSupabaseUser, async (req, res) => {
+  const { title, body, category, topic, authorName } = req.body || {};
+  if (!title || !body || !category) {
+    return res.status(400).json({ error: "Falta title, body o category." });
+  }
+  try {
+    const row = await db.insertForumPost({
+      id: crypto.randomUUID(),
+      authorId: req.supabaseUser.id,
+      authorName: authorName || req.supabaseUser.email,
+      title,
+      body,
+      category,
+      topic: topic || "",
+    });
+    res.status(201).json(toForumPost({ ...row, forum_replies: [] }));
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.post("/api/forum/posts/:id/replies", requireSupabaseUser, async (req, res) => {
+  const { body, authorName } = req.body || {};
+  if (!body) return res.status(400).json({ error: "Falta body." });
+  try {
+    const row = await db.insertForumReply(req.params.id, {
+      id: crypto.randomUUID(),
+      authorId: req.supabaseUser.id,
+      authorName: authorName || req.supabaseUser.email,
+      body,
+    });
+    res.status(201).json(toForumReply(row));
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.patch("/api/forum/posts/:id", requireSupabaseUser, async (req, res) => {
+  try {
+    const ownerId = await db.getForumPostOwner(req.params.id);
+    if (!ownerId) return res.status(404).json({ error: "Publicación no encontrada." });
+    if (ownerId !== req.supabaseUser.id) {
+      return res.status(403).json({ error: "Solo el autor puede editar esta publicación." });
+    }
+    await db.setForumPostResolved(req.params.id, !!(req.body || {}).resolved);
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.delete("/api/forum/posts/:id", requireSupabaseUser, async (req, res) => {
+  try {
+    const ownerId = await db.getForumPostOwner(req.params.id);
+    if (!ownerId) return res.status(404).json({ error: "Publicación no encontrada." });
+    if (ownerId !== req.supabaseUser.id) {
+      return res.status(403).json({ error: "Solo el autor puede borrar esta publicación." });
+    }
+    await db.deleteForumPost(req.params.id);
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// ---------- Tienda / Emprendimiento (compartido entre todos los usuarios) ----------
+
+function toGig(g) {
+  return {
+    id: g.id,
+    authorId: g.author_id,
+    authorName: g.author_name,
+    title: g.title,
+    description: g.description,
+    price: g.price,
+    type: g.type,
+    images: g.images || [],
+    contact: g.contact,
+  };
+}
+
+app.get("/api/gigs", async (_req, res) => {
+  try {
+    const rows = await db.getGigs();
+    res.json(rows.map(toGig));
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.post("/api/gigs", requireSupabaseUser, async (req, res) => {
+  const { title, description, price, type, images, contact, authorName } = req.body || {};
+  if (!title || !description || !type) {
+    return res.status(400).json({ error: "Falta title, description o type." });
+  }
+  try {
+    const row = await db.insertGig({
+      id: crypto.randomUUID(),
+      authorId: req.supabaseUser.id,
+      authorName: authorName || req.supabaseUser.email,
+      title,
+      description,
+      price: price || "",
+      type,
+      images: images || [],
+      contact: contact || "",
+    });
+    res.status(201).json(toGig(row));
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.patch("/api/gigs/:id", requireSupabaseUser, async (req, res) => {
+  try {
+    const ownerId = await db.getGigOwner(req.params.id);
+    if (!ownerId) return res.status(404).json({ error: "Publicación no encontrada." });
+    if (ownerId !== req.supabaseUser.id) {
+      return res.status(403).json({ error: "Solo el autor puede editar esta publicación." });
+    }
+    const { title, description, price, type, images, contact } = req.body || {};
+    const row = await db.updateGig(req.params.id, { title, description, price, type, images, contact });
+    res.json(toGig(row));
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.delete("/api/gigs/:id", requireSupabaseUser, async (req, res) => {
+  try {
+    const ownerId = await db.getGigOwner(req.params.id);
+    if (!ownerId) return res.status(404).json({ error: "Publicación no encontrada." });
+    if (ownerId !== req.supabaseUser.id) {
+      return res.status(403).json({ error: "Solo el autor puede borrar esta publicación." });
+    }
+    await db.deleteGig(req.params.id);
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: err.message });
+  }
+});
+
 app.get("/api/courses", async (req, res) => {
   const token = requireCanvasToken(req, res);
   if (!token) return;
@@ -243,6 +481,7 @@ app.get("/api/courses", async (req, res) => {
           name: c.name,
           courseCode: c.course_code ?? null,
           term: c.term?.name ?? null,
+          termStartAt: c.term?.start_at ?? null,
           credits: getCreditsForCourse(c),
         }))
     );

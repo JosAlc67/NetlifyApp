@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, BookOpen, Briefcase, Heart, Mail, Package } from "lucide-react";
-import * as store from "@/lib/store";
+import * as gigsClient from "@/lib/gigs-client";
 import { Gig, GigType } from "@/lib/types";
 
 const TYPE_LABEL: Record<GigType, string> = {
@@ -23,13 +23,20 @@ function GigDetail() {
   const searchParams = useSearchParams();
   const id = searchParams.get("id") ?? "";
   const [gig, setGig] = useState<Gig | null | undefined>(undefined);
+  const [error, setError] = useState<string | null>(null);
   const [activeImage, setActiveImage] = useState(0);
   const [showContact, setShowContact] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    setGig(store.getGig(id) ?? null);
     setActiveImage(0);
+    gigsClient
+      .getGigs()
+      .then((gigs) => setGig(gigs.find((g) => g.id === id) ?? null))
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "No se pudo cargar la publicación.");
+        setGig(null);
+      });
   }, [id]);
 
   if (gig === undefined) return null;
@@ -40,7 +47,7 @@ function GigDetail() {
         <Link href="/entrepreneurship" className="inline-flex items-center gap-1.5 text-sm font-semibold text-text-muted hover:text-navy mb-4">
           <ArrowLeft size={16} /> Emprendimiento
         </Link>
-        <p className="text-sm text-text-muted">Esta publicación ya no está disponible.</p>
+        <p className="text-sm text-text-muted">{error ?? "Esta publicación ya no está disponible."}</p>
       </div>
     );
   }

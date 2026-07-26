@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowLeft, EyeOff, Trophy, User as UserIcon } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import * as store from "@/lib/store";
+import * as statsClient from "@/lib/stats-client";
 import { User } from "@/lib/types";
 
 function initials(fullName: string) {
@@ -43,6 +44,8 @@ export default function SettingsPrivacyPage() {
   function toggle() {
     store.setAnonymous(user!.id, !user!.anonymous);
     refresh();
+    const freshUser = store.getUsers().find((u) => u.id === user!.id);
+    if (freshUser) statsClient.pushStats(freshUser);
   }
 
   const displayName = user.anonymous ? "Anónimo" : user.fullName.split(" ")[0] + " " + (user.fullName.split(" ")[1]?.[0] ?? "") + ".";
