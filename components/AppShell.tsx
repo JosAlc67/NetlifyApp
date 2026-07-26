@@ -14,6 +14,7 @@ import {
   Settings,
   LogOut,
   Music2,
+  MessagesSquare,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { useAuth } from "@/lib/auth-context";
@@ -30,6 +31,7 @@ const NAV_ITEMS = [
   { href: "/points", label: "Puntos", icon: Star },
   { href: "/ranking", label: "Ranking", icon: Trophy },
   { href: "/entrepreneurship", label: "Tienda", icon: Store },
+  { href: "/forum", label: "Foro", icon: MessagesSquare },
   { href: "/agenda", label: "Libreta", icon: BookOpen },
   { href: "/week", label: "Semana", icon: CalendarDays },
   { href: "/music", label: "Música", icon: Music2 },

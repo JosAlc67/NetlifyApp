@@ -10,7 +10,7 @@ import { useAuth } from "@/lib/auth-context";
 const ESPOL_EMAIL_RE = /^[a-z0-9._%+-]+@espol\.edu\.ec$/i;
 
 export default function RegisterPage() {
-  const { register } = useAuth();
+  const { register, resendConfirmation } = useAuth();
   const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -19,6 +19,8 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [pending, setPending] = useState<{ email: string; message?: string } | null>(null);
+  const [alreadyRegistered, setAlreadyRegistered] = useState<{ email: string; message?: string } | null>(null);
+  const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -34,7 +36,9 @@ export default function RegisterPage() {
     setSubmitting(true);
     try {
       const outcome = await register(fullName, email, password);
-      if (outcome.pendingConfirmation) {
+      if (outcome.alreadyRegistered) {
+        setAlreadyRegistered({ email: email.trim().toLowerCase(), message: outcome.message });
+      } else if (outcome.pendingConfirmation) {
         setPending({ email: email.trim().toLowerCase(), message: outcome.message });
       } else {
         router.push("/home");
@@ -44,6 +48,52 @@ export default function RegisterPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function handleResend() {
+    if (!alreadyRegistered) return;
+    setResendState("sending");
+    try {
+      await resendConfirmation(alreadyRegistered.email);
+      setResendState("sent");
+    } catch {
+      setResendState("idle");
+    }
+  }
+
+  if (alreadyRegistered) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-ink px-4 py-10">
+        <div className="w-full max-w-sm bg-surface rounded-3xl shadow-2xl p-8 text-center">
+          <div className="mb-6 flex justify-center">
+            <Logo />
+          </div>
+          <div className="text-4xl mb-3">👋</div>
+          <h1 className="font-display text-xl font-bold text-navy mb-2">Ya tienes una cuenta</h1>
+          <p className="text-sm text-text-muted mb-6">
+            {alreadyRegistered.message ?? `Ya existe una cuenta con ${alreadyRegistered.email}.`}
+          </p>
+          <Link
+            href="/login"
+            className="inline-block w-full rounded-xl bg-primary text-white font-semibold py-2.5 text-sm hover:bg-primary-dark transition-colors mb-3"
+          >
+            Ir a iniciar sesión
+          </Link>
+          <button
+            type="button"
+            onClick={handleResend}
+            disabled={resendState !== "idle"}
+            className="text-xs font-semibold text-text-muted hover:text-primary disabled:opacity-60"
+          >
+            {resendState === "sent"
+              ? "Correo reenviado ✓"
+              : resendState === "sending"
+                ? "Reenviando…"
+                : "¿Nunca confirmaste tu correo? Reenviar confirmación"}
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (pending) {

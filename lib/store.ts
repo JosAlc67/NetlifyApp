@@ -25,6 +25,8 @@ import {
   LevelInfo,
   NotebookEntry,
   PersonalTask,
+  ForumPost,
+  ForumCategory,
   DEFAULT_NOTIFICATION_PREFS,
   DEFAULT_NOTIFICATION_SOUND,
   NotificationPrefs,
@@ -40,6 +42,7 @@ const KEYS = {
   gigs: "agendify_gigs",
   notebook: "agendify_notebook",
   personalTasks: "agendify_personal_tasks",
+  forumPosts: "agendify_forum_posts",
 } as const;
 
 function read<T>(key: string, fallback: T): T {
@@ -790,5 +793,66 @@ export function setAnonymous(userId: string, anonymous: boolean) {
 
 export function setCanvasToken(userId: string, canvasToken: string | undefined) {
   return updateUser(userId, { canvasToken });
+}
+
+// ---------- Foro (pedir/dar ayuda por materia, curso o tema general) ----------
+
+export function getForumPosts(): ForumPost[] {
+  return read<ForumPost[]>(KEYS.forumPosts, [])
+    .map((p) => ({ ...p, replies: p.replies ?? [] }))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export function getForumPost(id: string): ForumPost | undefined {
+  return getForumPosts().find((p) => p.id === id);
+}
+
+export function getMyForumPosts(userId: string): ForumPost[] {
+  return getForumPosts().filter((p) => p.authorId === userId);
+}
+
+export function addForumPost(post: {
+  authorId: string;
+  authorName: string;
+  title: string;
+  body: string;
+  category: ForumCategory;
+  topic: string;
+}): ForumPost {
+  const all = read<ForumPost[]>(KEYS.forumPosts, []);
+  const newPost: ForumPost = {
+    ...post,
+    id: uid(),
+    resolved: false,
+    createdAt: new Date().toISOString(),
+    replies: [],
+  };
+  write(KEYS.forumPosts, [...all, newPost]);
+  return newPost;
+}
+
+export function deleteForumPost(id: string) {
+  const all = read<ForumPost[]>(KEYS.forumPosts, []);
+  write(KEYS.forumPosts, all.filter((p) => p.id !== id));
+}
+
+export function toggleForumResolved(id: string) {
+  const all = read<ForumPost[]>(KEYS.forumPosts, []);
+  const updated = all.map((p) => (p.id === id ? { ...p, resolved: !p.resolved } : p));
+  write(KEYS.forumPosts, updated);
+  return updated.find((p) => p.id === id);
+}
+
+export function addForumReply(
+  postId: string,
+  reply: { authorId: string; authorName: string; body: string }
+) {
+  const all = read<ForumPost[]>(KEYS.forumPosts, []);
+  const newReply = { ...reply, id: uid(), createdAt: new Date().toISOString() };
+  const updated = all.map((p) =>
+    p.id === postId ? { ...p, replies: [...(p.replies ?? []), newReply] } : p
+  );
+  write(KEYS.forumPosts, updated);
+  return updated.find((p) => p.id === postId);
 }
 

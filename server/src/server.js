@@ -142,11 +142,15 @@ app.post("/api/auth/register", async (req, res) => {
     // de un error, para no revelar si la cuenta existe. La señal es
     // `identities` vacío y sin sesión — ahí no hay ningún usuario real al
     // que engancharle un perfil, así que no lo intentamos.
+    //
+    // Elegimos revelarlo igual (en vez de mantener el mensaje ambiguo de
+    // Supabase) porque para esta app la mejor UX ("ya tienes cuenta, inicia
+    // sesión") pesa más que el riesgo de enumeración de correos @espol.edu.ec.
     const isRealNewUser = result.session || (result.identities && result.identities.length > 0);
     if (!isRealNewUser) {
       return res.json({
-        pendingConfirmation: true,
-        message: "Si ese correo no tenía cuenta, te enviamos un correo de confirmación. Si ya la tenías, revisa tu bandeja o inicia sesión.",
+        alreadyRegistered: true,
+        message: "Ya existe una cuenta con este correo. Inicia sesión, o usa \"reenviar confirmación\" si nunca la activaste.",
       });
     }
     await db.upsertProfile(result.id, { fullName, email: normalizedEmail });

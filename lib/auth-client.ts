@@ -20,6 +20,7 @@ interface RegisterResult {
   session?: StoredSession;
   profile?: Profile;
   pendingConfirmation?: boolean;
+  alreadyRegistered?: boolean;
   message?: string;
 }
 

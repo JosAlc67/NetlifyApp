@@ -7,6 +7,7 @@ import * as authClient from "./auth-client";
 
 export interface RegisterOutcome {
   pendingConfirmation: boolean;
+  alreadyRegistered?: boolean;
   message?: string;
 }
 
@@ -60,6 +61,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       store.setSession(result.profile.id);
       refresh();
       return { pendingConfirmation: false };
+    }
+    if (result.alreadyRegistered) {
+      return { pendingConfirmation: false, alreadyRegistered: true, message: result.message };
     }
     return { pendingConfirmation: true, message: result.message };
   };

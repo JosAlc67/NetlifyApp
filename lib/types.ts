@@ -201,3 +201,34 @@ export interface LevelInfo {
   pointsToNext: number;
   progress: number; // 0..1
 }
+
+// ---------- Foro (pedir/dar ayuda por materia, curso o tema general) ----------
+
+export type ForumCategory = "materia" | "curso" | "general";
+
+export const FORUM_CATEGORY_LABEL: Record<ForumCategory, string> = {
+  materia: "Materia",
+  curso: "Curso",
+  general: "General",
+};
+
+export interface ForumReply {
+  id: string;
+  authorId: string;
+  authorName: string;
+  body: string;
+  createdAt: string; // ISO
+}
+
+export interface ForumPost {
+  id: string;
+  authorId: string;
+  authorName: string;
+  title: string;
+  body: string;
+  category: ForumCategory;
+  topic: string; // nombre de la materia/curso; vacío si category es "general"
+  resolved: boolean;
+  createdAt: string; // ISO
+  replies: ForumReply[];
+}
