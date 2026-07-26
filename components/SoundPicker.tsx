@@ -22,7 +22,16 @@ import {
   isSpotifyConnected,
   startSpotifyLogin,
 } from "@/lib/spotify-auth";
-import { playSpotifyTrack, SpotifyPremiumRequiredError } from "@/lib/spotify-player";
+import {
+  captureSnapshot,
+  NOTIFICATION_SOUND_MAX_MS,
+  pauseForSideAudio,
+  playSpotifyTrack,
+  PlaybackSnapshot,
+  resumeAfterSideAudio,
+  restoreSnapshotOrStop,
+  SpotifyPremiumRequiredError,
+} from "@/lib/spotify-player";
 
 type Tab = "presets" | "upload" | "spotify";
 
@@ -65,8 +74,21 @@ export function SoundPicker({
   const [audioError, setAudioError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
+  // Si estabas escuchando música desde la ventana Música, se pausa mientras
+  // pruebas un tono aquí — pero debe seguir sonando apenas termines de
+  // probarlo, así que guardamos si había algo activo para reanudarlo.
+  const wasPlayingRef = useRef(false);
+  const capTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function clearCapTimer() {
+    if (capTimerRef.current) {
+      clearTimeout(capTimerRef.current);
+      capTimerRef.current = null;
+    }
+  }
 
   function stopPreview() {
+    clearCapTimer();
     audioRef.current?.pause();
     audioRef.current = null;
     if (objectUrlRef.current) {
@@ -85,10 +107,22 @@ export function SoundPicker({
     }
     stopPreview();
     setAudioError(null);
+    const wasPlaying = await pauseForSideAudio();
+    wasPlayingRef.current = wasPlaying;
     const audio = new Audio(url);
     audioRef.current = audio;
     setPlayingId(id);
-    audio.onended = () => setPlayingId((p) => (p === id ? null : p));
+    audio.addEventListener(
+      "pause",
+      () => {
+        clearCapTimer();
+        resumeAfterSideAudio(wasPlayingRef.current);
+        wasPlayingRef.current = false;
+        setPlayingId((p) => (p === id ? null : p));
+      },
+      { once: true }
+    );
+    capTimerRef.current = setTimeout(() => audio.pause(), NOTIFICATION_SOUND_MAX_MS);
     try {
       await audio.play();
     } catch {
@@ -108,11 +142,25 @@ export function SoundPicker({
     try {
       const blob = await getSoundFile(id);
       if (!blob) throw new Error("No se encontró el archivo guardado.");
+      const wasPlaying = await pauseForSideAudio();
+      wasPlayingRef.current = wasPlaying;
       const url = URL.createObjectURL(blob);
       objectUrlRef.current = url;
       const audio = new Audio(url);
       audioRef.current = audio;
-      audio.onended = () => stopPreview();
+      audio.addEventListener(
+        "pause",
+        () => {
+          clearCapTimer();
+          URL.revokeObjectURL(url);
+          if (objectUrlRef.current === url) objectUrlRef.current = null;
+          resumeAfterSideAudio(wasPlayingRef.current);
+          wasPlayingRef.current = false;
+          setPlayingId((p) => (p === id ? null : p));
+        },
+        { once: true }
+      );
+      capTimerRef.current = setTimeout(() => audio.pause(), NOTIFICATION_SOUND_MAX_MS);
       await audio.play();
     } catch (err) {
       setAudioError(err instanceof Error ? err.message : "No se pudo reproducir el archivo.");
@@ -269,6 +317,27 @@ function SpotifyTab({
   const [results, setResults] = useState<FavoriteSong[]>([]);
   const [searching, setSearching] = useState(false);
   const [connectingFullId, setConnectingFullId] = useState<string | null>(null);
+  // Escuchar "Completa" en esta pestaña es solo una vista previa: si estabas
+  // escuchando otra cosa, debe seguir sonando apenas termines de probar
+  // (como mucho 1 minuto después, o al salir de esta pestaña).
+  const pendingRevertRef = useRef<{ snapshot: PlaybackSnapshot | null; timer: ReturnType<typeof setTimeout> } | null>(null);
+
+  function clearPendingRevert() {
+    if (pendingRevertRef.current) {
+      clearTimeout(pendingRevertRef.current.timer);
+      pendingRevertRef.current = null;
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (pendingRevertRef.current) {
+        restoreSnapshotOrStop(pendingRevertRef.current.snapshot, getSpotifyAccessToken);
+        clearTimeout(pendingRevertRef.current.timer);
+        pendingRevertRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     setConnected(isSpotifyConnected());
@@ -312,7 +381,9 @@ function SpotifyTab({
   async function selectFullTrack(track: FavoriteSong) {
     onStop();
     onError(null);
+    clearPendingRevert();
     setConnectingFullId(track.id);
+    const snapshot = captureSnapshot();
     try {
       await playSpotifyTrack(track.id, getSpotifyAccessToken);
       onChange({
@@ -321,6 +392,11 @@ function SpotifyTab({
         label: `${track.name} — ${track.artist}`,
         url: null,
       });
+      const timer = setTimeout(() => {
+        restoreSnapshotOrStop(snapshot, getSpotifyAccessToken);
+        pendingRevertRef.current = null;
+      }, NOTIFICATION_SOUND_MAX_MS);
+      pendingRevertRef.current = { snapshot, timer };
     } catch (err) {
       if (err instanceof SpotifyPremiumRequiredError) {
         onError("Necesitas Spotify Premium para reproducir canciones completas — puedes usar el clip de 30s en su lugar.");

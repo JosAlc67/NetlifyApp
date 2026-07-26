@@ -4,7 +4,14 @@ import * as store from "./store";
 import { NotificationPrefs, PersonalTask } from "./types";
 import { getSoundFile } from "./sound-storage";
 import { getSpotifyAccessToken } from "./spotify-auth";
-import { isPlaybackActive, playSpotifyTrack } from "./spotify-player";
+import {
+  captureSnapshot,
+  NOTIFICATION_SOUND_MAX_MS,
+  pauseForSideAudio,
+  playSpotifyTrack,
+  resumeAfterSideAudio,
+  restoreSnapshotOrStop,
+} from "./spotify-player";
 
 // Aviso "mientras la app esté abierta": funciona ya, sin infraestructura nueva.
 // Es el nivel base bajo el sistema de notificaciones push real (que sí avisa
@@ -17,28 +24,49 @@ const timers = new Map<string, ReturnType<typeof setTimeout>>();
 // reproducir audio sin una interacción previa del usuario puede estar
 // bloqueado por la política de autoplay del navegador — se intenta y, si el
 // navegador lo bloquea, se falla en silencio en vez de tumbar la pantalla.
+// Si estabas escuchando música (desde la ventana Música), es normal que se
+// pause mientras suena el sonido de la notificación — pero debe seguir
+// donde se quedó apenas termine, y el sonido de notificación nunca dura más
+// de 1 minuto (ver NOTIFICATION_SOUND_MAX_MS en spotify-player.ts).
+function playCapped(audio: HTMLAudioElement, onDone: () => void) {
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    onDone();
+  };
+  const timer = setTimeout(() => audio.pause(), NOTIFICATION_SOUND_MAX_MS);
+  audio.addEventListener("pause", () => { clearTimeout(timer); finish(); }, { once: true });
+}
+
 async function playNotificationSound(sound: NotificationPrefs["sound"]) {
   try {
     if (sound.source === "spotify-full") {
-      // Si ya está sonando música (desde la ventana Música), no la
-      // interrumpimos con la canción de la alarma — se avisa solo con la
-      // notificación del sistema y la vibración.
-      if (isPlaybackActive()) return;
+      const snapshot = captureSnapshot();
       await playSpotifyTrack(sound.id, getSpotifyAccessToken);
+      setTimeout(() => restoreSnapshotOrStop(snapshot, getSpotifyAccessToken), NOTIFICATION_SOUND_MAX_MS);
       return;
     }
+
+    let audio: HTMLAudioElement | null = null;
+    let revokeUrl: string | null = null;
     if (sound.source === "upload") {
       const blob = await getSoundFile(sound.id);
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audio.onended = () => URL.revokeObjectURL(url);
-      await audio.play();
-      return;
+      if (blob) {
+        revokeUrl = URL.createObjectURL(blob);
+        audio = new Audio(revokeUrl);
+      }
+    } else if (sound.url) {
+      audio = new Audio(sound.url);
     }
-    if (sound.url) {
-      await new Audio(sound.url).play();
-    }
+    if (!audio) return; // silencioso, o archivo no encontrado: no tocamos el reproductor de Spotify
+
+    const wasPlaying = await pauseForSideAudio();
+    playCapped(audio, () => {
+      if (revokeUrl) URL.revokeObjectURL(revokeUrl);
+      resumeAfterSideAudio(wasPlaying);
+    });
+    await audio.play();
   } catch (err) {
     console.error("No se pudo reproducir el sonido de la notificación:", err);
   }

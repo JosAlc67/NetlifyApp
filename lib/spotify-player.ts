@@ -111,6 +111,7 @@ export function isPlaybackActive(): boolean {
 
 interface SpotifyPlayerStateChanged {
   paused: boolean;
+  position: number; // ms transcurridos en la canción actual, al momento del evento
   track_window: {
     current_track: {
       id: string;
@@ -123,6 +124,7 @@ interface SpotifyPlayerStateChanged {
 
 let connection: Connection | null = null;
 let connectPromise: Promise<Connection> | null = null;
+let lastKnownPositionMs = 0;
 
 /** Conecta (o reutiliza) un dispositivo Web Playback de Spotify en esta pestaña. */
 export function connectSpotifyPlayer(
@@ -145,6 +147,7 @@ export function connectSpotifyPlayer(
       if (!payload) return;
       const state = payload as SpotifyPlayerStateChanged;
       const current = state.track_window?.current_track;
+      lastKnownPositionMs = state.position ?? 0;
       setPlaybackState({
         isPaused: state.paused,
         track: current
@@ -227,4 +230,69 @@ export async function previousTrack(): Promise<void> {
 export function stopAndHidePlayer(): void {
   connection?.player.pause().catch(() => {});
   setPlaybackState({ track: null, isPaused: true });
+}
+
+// ---------- Interrumpir temporalmente para un sonido de notificación ----------
+// Un sonido de notificación (probar un tono en Ajustes, o el que suena de
+// verdad al dispararse una alarma) nunca debe reemplazar tu música para
+// siempre: si estabas escuchando algo, es normal que se pause mientras suena
+// la notificación, pero debe seguir donde se quedó apenas termine. Dura como
+// mucho 1 minuto — después de eso se corta sola.
+
+/** Tope de duración para cualquier sonido de notificación/preview (1 minuto). */
+export const NOTIFICATION_SOUND_MAX_MS = 60_000;
+
+export interface PlaybackSnapshot {
+  trackUri: string;
+  positionMs: number;
+}
+
+/** Snapshot de lo que estaba sonando en este momento, o null si no había nada activo. */
+export function captureSnapshot(): PlaybackSnapshot | null {
+  if (!playbackState.track || playbackState.isPaused) return null;
+  return { trackUri: `spotify:track:${playbackState.track.id}`, positionMs: lastKnownPositionMs };
+}
+
+/**
+ * Pausa el dispositivo sin cambiarle la canción (para que no se mezcle con un
+ * sonido aparte, como un preset o un archivo subido). Devuelve true si de
+ * verdad había algo sonando (y por lo tanto hay que reanudarlo después).
+ */
+export async function pauseForSideAudio(): Promise<boolean> {
+  if (!connection || !playbackState.track || playbackState.isPaused) return false;
+  await connection.player.pause().catch(() => {});
+  return true;
+}
+
+/** Reanuda lo que `pauseForSideAudio` dejó pausado (si es que había algo). */
+export async function resumeAfterSideAudio(wasPlaying: boolean): Promise<void> {
+  if (!wasPlaying || !connection) return;
+  await connection.player.resume().catch(() => {});
+}
+
+/**
+ * Restaura la canción/posición del snapshot tomado antes de reproducir una
+ * canción completa como notificación/preview — o, si no había nada sonando
+ * antes, simplemente cierra el reproductor.
+ */
+export async function restoreSnapshotOrStop(
+  snapshot: PlaybackSnapshot | null,
+  getAccessToken: () => Promise<string | null>
+): Promise<void> {
+  if (!snapshot) {
+    stopAndHidePlayer();
+    return;
+  }
+  try {
+    const { deviceId } = await connectSpotifyPlayer(getAccessToken);
+    const token = await getAccessToken();
+    if (!token) return;
+    await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ uris: [snapshot.trackUri], position_ms: snapshot.positionMs }),
+    });
+  } catch {
+    // No es crítico: si falla, el usuario puede seguir reproduciendo manualmente.
+  }
 }
